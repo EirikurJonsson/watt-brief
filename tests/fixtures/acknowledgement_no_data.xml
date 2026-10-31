@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Acknowledgement_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-1:acknowledgementdocument:7:0">
+  <Reason>
+    <code>999</code>
+    <text>No matching data found for Data item Day-ahead Prices [12.1.D] in domain 10Y1001A1001A82H</text>
+  </Reason>
+</Acknowledgement_MarketDocument>
