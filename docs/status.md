@@ -10,7 +10,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 3. [x] Structured logging and request IDs from the first line of app code
 4. [x] ENTSO-E client built and tested on synthetic fixtures; swap in real recordings once the token works
 5. [x] One agent answers one question end to end (on synthetic fixture data)
-6. [ ] Eval harness: quality evals and adversarial evals (injection, off-topic, abuse), run in CI
+6. [x] Eval harness: quality and adversarial evals with code graders, live results in docs/eval-results.md; CI runs lint and offline tests (live evals stay manual because they spend money)
 7. [ ] Input guards: length limit, topic check, structured output only
 8. [ ] Add planner and critic, measure whether they help, record in an ADR
 9. [ ] Metrics and monitoring: latency, error rate, tokens, cost per run, rejected requests

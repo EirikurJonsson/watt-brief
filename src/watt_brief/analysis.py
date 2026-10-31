@@ -17,6 +17,8 @@ class Window:
 class PriceFacts:
     zone: str
     resolution_minutes: int
+    slot_count: int
+    coverage_hours: float
     first_slot_utc: str
     last_slot_end_utc: str
     mean_eur_per_mwh: float
@@ -64,6 +66,8 @@ def analyse(series: PriceSeries, window_hours: int = 3) -> PriceFacts:
     return PriceFacts(
         zone=series.zone,
         resolution_minutes=series.resolution_minutes,
+        slot_count=len(series.points),
+        coverage_hours=len(series.points) * series.resolution_minutes / 60,
         first_slot_utc=_iso(series.points[0].start),
         last_slot_end_utc=_iso(last_end),
         mean_eur_per_mwh=round(sum(prices) / len(prices), 2),
