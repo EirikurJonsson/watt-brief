@@ -58,5 +58,5 @@ def configure_logging(level: int = logging.INFO) -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def log(logger: logging.Logger, event: str, **fields: object) -> None:
-    logger.info(event, extra={"fields": fields})
+def log(logger: logging.Logger, event: str, *, level: int = logging.INFO, **fields: object) -> None:
+    logger.log(level, event, extra={"fields": fields})

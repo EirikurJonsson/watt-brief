@@ -2,6 +2,7 @@
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
@@ -27,8 +28,15 @@ class Completion:
 
 
 class LLMClient:
-    def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        transport: httpx.BaseTransport | None = None,
+        on_completion: Callable[[str, Completion], None] | None = None,
+    ):
         self._settings = settings
+        # Called for every successful call, so spend is counted even if the request later fails.
+        self._on_completion = on_completion
         self._http = httpx.Client(
             base_url=settings.llm_base_url,
             headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
@@ -70,6 +78,8 @@ class LLMClient:
             latency_ms=latency_ms,
             cost_usd=self._cost(usage, input_tokens, output_tokens),
         )
+        if self._on_completion:
+            self._on_completion(step, completion)
         log(
             logger,
             "llm_call",

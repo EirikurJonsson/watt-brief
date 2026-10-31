@@ -12,16 +12,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from watt_brief.analysis import analyse
 from watt_brief.config import Settings, get_settings
-from watt_brief.entsoe import parse_day_ahead_xml
 from watt_brief.errors import BriefError, GuardRejected
 from watt_brief.evals.cases import ALL_CASES, PLANNER_CASES, Case
 from watt_brief.evals.graders import forbidden_failures, grounding_failures, missing_failures
 from watt_brief.llm import LLMClient, LLMError
 from watt_brief.logging import configure_logging, new_request_id
-from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
+from watt_brief.pipeline import FactsSource, run_pipeline
 from watt_brief.planner import make_plan
+from watt_brief.sources import fixture_facts_source
 
 FIXTURE = Path(__file__).resolve().parents[3] / "tests/fixtures/day_ahead_full_day.xml"
 RESULTS_DIR = Path(__file__).resolve().parents[3] / "evals/results"
@@ -29,18 +28,6 @@ RESULTS_DIR = Path(__file__).resolve().parents[3] / "evals/results"
 
 class SpendCapReached(Exception):
     pass
-
-
-def fixture_facts_source() -> FactsSource:
-    """Facts from the synthetic DE_LU fixture. Any other zone honestly has no data."""
-    series = parse_day_ahead_xml(FIXTURE.read_text(), "DE_LU")
-
-    def get(zone: str, window_hours: int):
-        if zone != "DE_LU":
-            raise NoDataError("I don't have price data for that zone yet.")
-        return analyse(series, window_hours=window_hours)
-
-    return get
 
 
 @dataclass
