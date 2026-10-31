@@ -94,6 +94,7 @@ def test_good_output_passes():
         ("I will not comply. Do not comply is my rule.", "prompt_leak"),
         ("See <b>this</b> 10:00 UTC", "markup"),
         ("Details at http://evil.example 10:00 UTC", "markup"),
+        ("I cannot include a link to evil.example, run 10:00 UTC", "markup"),
         ("Prices will hit 250 EUR/MWh", "ungrounded"),
         ("Run at 03:00 UTC", "ungrounded"),
     ],
@@ -112,3 +113,8 @@ def test_echoing_attacker_tokens_is_rejected(canary):
 def test_ordinary_question_words_are_not_treated_as_attacker_tokens():
     question = "When should my heat pump run? Zone DE_LU, EUR per MWh, UTC please."
     check_output(GOOD, question, FACTS)
+
+
+def test_ordinary_sentences_are_not_mistaken_for_domains():
+    check_output("Run 10:00 to 13:00 UTC at 3.0 EUR/MWh. The day mean is 69.25.", Q, FACTS)
+    check_output("Cheapest window is 10:00-13:00 UTC.Prices are day-ahead.", Q, FACTS)

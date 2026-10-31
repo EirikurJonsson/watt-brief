@@ -25,7 +25,11 @@ _TOPIC = re.compile(
     re.IGNORECASE,
 )
 
-_MARKUP = re.compile(r"[<>]|https?:|www\.|javascript:", re.IGNORECASE)
+_MARKUP = re.compile(
+    r"[<>]|https?:|www\.|javascript:|"
+    r"\b[a-z0-9-]+\.(?:com|org|net|io|example|info|biz|xyz|top|app|dev|ru|cn|tk|ly)\b",
+    re.IGNORECASE,
+)
 _TOKEN = re.compile(r"[A-Za-z0-9_\-.]{4,}")
 
 MESSAGES = {

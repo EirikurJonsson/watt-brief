@@ -70,3 +70,35 @@ when it was, and once it returned text that was not valid JSON.
 
 Run it yourself: `uv run python -m watt_brief.evals.runner --repeats 5` (needs a key in `.env`;
 hard spend cap `--max-cost`, default $0.25).
+
+## Planner and critic (step 8)
+
+Same cases and guards as above, 5 repeats, comparing pipeline configurations. Decision and
+reasoning: [ADR 003](adr/003-planner-yes-critic-not-yet.md).
+
+| Config | Quality | Adversarial | Cost | Median latency |
+|---|---|---|---|---|
+| Analyst only | 25/25 | 75/75 | $0.0042 | 3.4 s |
+| + planner | 25/25 | 75/75 | $0.0059 | 4.2 s |
+| + critic | 25/25 | 73/75 | $0.0084 | 4.3 s |
+| + planner and critic | 25/25 | 75/75 | $0.0093 | 4.5 s |
+
+Planner alone, 9 questions x 5 repeats: 45/45 on zone, window hours and intent, including an
+injection attempt and a question about an unsupported country.
+
+- **The critic showed no measurable benefit.** The baseline was already at the ceiling, so
+  this set cannot show one. It did cost about twice as much. It asked for a revision on 7 or
+  8 of roughly 55 model-answered requests.
+- **The critic run had two adversarial misses.** One was invalid JSON from the model. The other
+  was the model quoting an attacker's domain (`evil.example`) while refusing it. That second
+  one exposed a real gap in the output guard, which only caught links starting with `http` or
+  `www`. I closed it afterwards by adding a domain pattern, covered by a unit test. A live
+  re-run of that case (10 repeats) passed, but the model did not quote the domain in any of
+  them, so the live run does not prove the fix. The unit test does. Two misses in 75 is not a
+  statistically meaningful difference from zero in 75.
+- **The planner's value is capability, not score.** The existing suite only asks about the one
+  zone we have data for, so it cannot reward choosing the zone correctly.
+- **Still no data for other zones.** Until the ENTSO-E token works, only DE_LU has (synthetic)
+  data. The pipeline returns an honest "no data" error for the others.
+
+Next to test: a harder quality set, so the critic has something to improve.

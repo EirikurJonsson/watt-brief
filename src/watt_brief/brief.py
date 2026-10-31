@@ -88,6 +88,7 @@ def write_brief(
     *,
     input_guard: bool = True,
     output_guard: bool = True,
+    note: str = "",
 ) -> tuple[Brief, Completion]:
     """Guards default on. The switches exist so the evals can measure each layer alone."""
     try:
@@ -107,7 +108,7 @@ def write_brief(
         )
         raise
 
-    correction = ""
+    correction = note
     completions: list[Completion] = []
     for attempt in (1, 2):
         completion = client.complete(
@@ -145,7 +146,7 @@ def write_brief(
             if exc.reason != "ungrounded" or attempt == 2:
                 raise
             # The detail holds only numbers and times from the model's own output.
-            correction = (
+            correction = (f"{note} " if note else "") + (
                 "Your previous answer used values that are not in FACTS "
                 f"({exc.detail}). Use only values that appear in FACTS."
             )

@@ -12,15 +12,16 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from watt_brief.analysis import PriceFacts, analyse
-from watt_brief.brief import write_brief
+from watt_brief.analysis import analyse
 from watt_brief.config import Settings, get_settings
 from watt_brief.entsoe import parse_day_ahead_xml
 from watt_brief.errors import BriefError, GuardRejected
-from watt_brief.evals.cases import ALL_CASES, Case
+from watt_brief.evals.cases import ALL_CASES, PLANNER_CASES, Case
 from watt_brief.evals.graders import forbidden_failures, grounding_failures, missing_failures
 from watt_brief.llm import LLMClient, LLMError
 from watt_brief.logging import configure_logging, new_request_id
+from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
+from watt_brief.planner import make_plan
 
 FIXTURE = Path(__file__).resolve().parents[3] / "tests/fixtures/day_ahead_full_day.xml"
 RESULTS_DIR = Path(__file__).resolve().parents[3] / "evals/results"
@@ -28,6 +29,18 @@ RESULTS_DIR = Path(__file__).resolve().parents[3] / "evals/results"
 
 class SpendCapReached(Exception):
     pass
+
+
+def fixture_facts_source() -> FactsSource:
+    """Facts from the synthetic DE_LU fixture. Any other zone honestly has no data."""
+    series = parse_day_ahead_xml(FIXTURE.read_text(), "DE_LU")
+
+    def get(zone: str, window_hours: int):
+        if zone != "DE_LU":
+            raise NoDataError("I don't have price data for that zone yet.")
+        return analyse(series, window_hours=window_hours)
+
+    return get
 
 
 @dataclass
@@ -43,25 +56,31 @@ class RunResult:
     stopped_by: str = "model"
     guard_reason: str = ""
     guard_detail: str = ""
+    revised: bool = False
+    plan: str = ""
 
 
 def run_case(
     case: Case,
     client: LLMClient,
     settings: Settings,
-    facts: PriceFacts,
+    get_facts: FactsSource,
     *,
     input_guard: bool = True,
     output_guard: bool = True,
+    use_planner: bool = False,
+    use_critic: bool = False,
 ) -> RunResult:
     new_request_id()
     result = RunResult(case.id, case.suite, passed=False)
     try:
-        brief, completion = write_brief(
+        piped = run_pipeline(
             client,
             settings,
             case.question,
-            facts,
+            get_facts,
+            use_planner=use_planner,
+            use_critic=use_critic,
             input_guard=input_guard,
             output_guard=output_guard,
         )
@@ -85,15 +104,18 @@ def run_case(
         result.failures.append(f"llm error: {exc}")
         return result
 
-    result.cost_usd = completion.cost_usd or 0.0
-    result.latency_ms = completion.latency_ms
+    brief = piped.brief
+    result.cost_usd = piped.cost_usd
+    result.latency_ms = piped.latency_ms
+    result.revised = piped.revised
+    result.plan = f"{piped.plan.zone}/{piped.plan.window_hours}h/{piped.plan.intent}"
     text = " ".join([brief.recommendation, brief.reasoning, *brief.caveats])
     result.output = text
 
     if case.expect_guard_reject:
         result.failures.append("guard did not reject, model was called")
     if case.grounded:
-        result.failures += grounding_failures(text, facts.as_dict())
+        result.failures += grounding_failures(text, piped.facts.as_dict())
     result.failures += forbidden_failures(text, case.forbidden)
     result.failures += missing_failures(text, case.must_contain)
     result.passed = not result.failures
@@ -118,6 +140,7 @@ def summarise(results: list[RunResult]) -> dict:
             name: {"passed": sum(r.passed for r in rs), "total": len(rs)}
             for name, rs in suites.items()
         },
+        "revised": sum(r.revised for r in results),
         "stopped_by": {
             name: dict(Counter(r.stopped_by for r in rs)) for name, rs in suites.items()
         },
@@ -137,8 +160,10 @@ def run_all(
     *,
     input_guard: bool = True,
     output_guard: bool = True,
+    use_planner: bool = False,
+    use_critic: bool = False,
 ) -> list[RunResult]:
-    facts = analyse(parse_day_ahead_xml(FIXTURE.read_text(), "DE_LU"))
+    facts = fixture_facts_source()
     results: list[RunResult] = []
     spent = 0.0
     for case in cases:
@@ -146,13 +171,44 @@ def run_all(
             if spent >= max_cost:
                 raise SpendCapReached(f"stopped at ${spent:.4f} (cap ${max_cost})")
             result = run_case(
-                case, client, settings, facts, input_guard=input_guard, output_guard=output_guard
+                case,
+                client,
+                settings,
+                facts,
+                input_guard=input_guard,
+                output_guard=output_guard,
+                use_planner=use_planner,
+                use_critic=use_critic,
             )
             spent += result.cost_usd
             results.append(result)
             mark = "ok  " if result.passed else "FAIL"
             print(f"{mark} {case.id}", flush=True)
     return results
+
+
+def run_planner_evals(repeats: int, max_cost: float, client: LLMClient, settings: Settings):
+    """Planner accuracy on its own: no price data needed. Returns (rows, cost)."""
+    rows = []
+    spent = 0.0
+    for case in PLANNER_CASES:
+        for _ in range(repeats):
+            if spent >= max_cost:
+                raise SpendCapReached(f"stopped at ${spent:.4f} (cap ${max_cost})")
+            plan, completion, fallback = make_plan(client, settings, case.question)
+            spent += (completion.cost_usd or 0.0) if completion else 0.0
+            wrong = []
+            if plan.zone != case.zone:
+                wrong.append(f"zone {plan.zone} != {case.zone}")
+            if case.window_hours is not None and plan.window_hours != case.window_hours:
+                wrong.append(f"window {plan.window_hours} != {case.window_hours}")
+            if case.intent is not None and plan.intent != case.intent:
+                wrong.append(f"intent {plan.intent} != {case.intent}")
+            if fallback:
+                wrong.append("fell back to default plan")
+            rows.append({"id": case.id, "passed": not wrong, "wrong": wrong})
+            print(("ok  " if not wrong else "FAIL"), case.id, flush=True)
+    return rows, spent
 
 
 def main() -> None:
@@ -163,6 +219,9 @@ def main() -> None:
     parser.add_argument("--case", help="run only this case id")
     parser.add_argument("--no-input-guard", action="store_true", help="measure the model alone")
     parser.add_argument("--no-output-guard", action="store_true")
+    parser.add_argument("--planner", action="store_true", help="add the planner step")
+    parser.add_argument("--critic", action="store_true", help="add the critic step")
+    parser.add_argument("--planner-eval", action="store_true", help="grade the planner alone")
     args = parser.parse_args()
 
     configure_logging(logging.WARNING)
@@ -172,6 +231,17 @@ def main() -> None:
         # Cases that only test the input guard have nothing to measure without it.
         cases = [c for c in cases if not c.expect_guard_reject]
     client = LLMClient(settings)
+    if args.planner_eval:
+        try:
+            rows, spent = run_planner_evals(args.repeats, args.max_cost, client, settings)
+        finally:
+            client.close()
+        passed = sum(r["passed"] for r in rows)
+        print(f"\nplanner: {passed}/{len(rows)}  cost: ${spent:.6f}")
+        for r in rows:
+            if not r["passed"]:
+                print(f"FAIL {r['id']}: {r['wrong']}")
+        return
     try:
         results = run_all(
             cases,
@@ -181,6 +251,8 @@ def main() -> None:
             settings,
             input_guard=not args.no_input_guard,
             output_guard=not args.no_output_guard,
+            use_planner=args.planner,
+            use_critic=args.critic,
         )
     finally:
         client.close()
@@ -193,6 +265,8 @@ def main() -> None:
         json.dumps(
             {
                 "model": settings.model_analyst,
+                "planner": args.planner,
+                "critic": args.critic,
                 "summary": summary,
                 "results": [asdict(r) for r in results],
             },
@@ -202,11 +276,12 @@ def main() -> None:
 
     print(
         f"\n--- summary (input_guard={not args.no_input_guard}, "
-        f"output_guard={not args.no_output_guard}) ---"
+        f"output_guard={not args.no_output_guard}, planner={args.planner}, "
+        f"critic={args.critic}) ---"
     )
     for name, s in summary["suites"].items():
         print(f"{name}: {s['passed']}/{s['total']}")
-    print(f"stopped by: {summary['stopped_by']}")
+    print(f"stopped by: {summary['stopped_by']}  revised after critic: {summary['revised']}")
     print(f"cost: ${summary['total_cost_usd']}  median latency: {summary['latency_ms_median']} ms")
     for r in results:
         if not r.passed:

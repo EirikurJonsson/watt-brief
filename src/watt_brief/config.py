@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     price_input_per_mtok_usd: float | None = None
     price_output_per_mtok_usd: float | None = None
 
+    # Chosen by the evals, see docs/adr/003-planner-yes-critic-not-yet.md.
+    use_planner: bool = True
+    use_critic: bool = False
+
     llm_timeout_seconds: float = 60.0
     max_output_tokens: int = 1000
 
