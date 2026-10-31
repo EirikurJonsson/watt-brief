@@ -22,3 +22,21 @@ def test_secret_does_not_print():
     )
     assert "sk-supersecret" not in repr(s)
     assert "sk-supersecret" not in str(s)
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_optional_secrets_mean_unset(blank):
+    s = Settings(
+        _env_file=None,
+        llm_base_url="https://x/v1",
+        llm_api_key="sk-x",
+        model_planner="m",
+        model_analyst="m",
+        model_critic="m",
+        entsoe_api_token=blank,
+        metrics_token=blank,
+        alert_webhook_url=blank,
+    )
+    assert s.entsoe_api_token is None
+    assert s.metrics_token is None
+    assert s.alert_webhook_url is None

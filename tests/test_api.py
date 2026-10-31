@@ -282,3 +282,10 @@ def test_page_has_no_inline_script_or_style_and_no_unsafe_dom_apis():
 def test_healthz_reports_the_data_source(tmp_path):
     with make_client(tmp_path) as client:
         assert client.get("/healthz").json()["data_source"] == "synthetic"
+
+
+def test_blank_metrics_token_does_not_open_metrics(tmp_path):
+    # METRICS_TOKEN= in .env must not turn /metrics into a public endpoint
+    with make_client(tmp_path, metrics_token="") as client:
+        assert client.get("/metrics").status_code == 404
+        assert client.get("/metrics", headers={"authorization": "Bearer "}).status_code == 404

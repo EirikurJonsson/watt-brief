@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     # /metrics is disabled (404) unless this is set.
     metrics_token: SecretStr | None = None
     alert_webhook_url: str | None = None
+
+    @field_validator("entsoe_api_token", "metrics_token", "alert_webhook_url", mode="before")
+    @classmethod
+    def _blank_means_unset(cls, value):
+        """A blank line in .env must mean "not set". An empty metrics token would otherwise
+        match a request that sends no credentials at all."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 @lru_cache
