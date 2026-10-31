@@ -1,0 +1,15 @@
+**/__pycache__
+.git
+.github
+.env
+.venv
+data
+evals/results
+docs
+scripts
+deploy
+.pytest_cache
+.ruff_cache
+KILL_SWITCH
+tests/*
+!tests/fixtures

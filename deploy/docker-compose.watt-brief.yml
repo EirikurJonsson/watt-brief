@@ -1,0 +1,62 @@
+# Compose fragment for watt-brief. MERGE it into the stack that already runs cloudflared
+# (/home/eirikur/n8n/docker-compose.yml). CI does not copy this file to the server.
+#
+# Ingress is the Cloudflare Tunnel only. The service is on its own network, shared with
+# cloudflared and nothing else, so no other container can reach it or forge the
+# CF-Connecting-IP header that the rate limiter trusts here.
+#
+# Also add `watt-net` to the networks of your existing `cloudflared` service:
+#
+#   cloudflared:
+#     networks:
+#       - n8n-net
+#       - watt-net
+#
+# In Cloudflare, route the public hostname to:  http://watt_brief:8000
+
+services:
+  watt_brief:
+    # Must match IMAGE_NAME in .github/workflows/ci.yml (lowercase).
+    image: ghcr.io/eirikurjonsson/watt-brief:latest
+    container_name: watt_brief
+    restart: always
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 128
+    # No published ports on purpose.
+    expose:
+      - "8000"
+    # Secrets live here, on the server only: LLM_API_KEY, LLM_BASE_URL, MODEL_*, METRICS_TOKEN.
+    env_file:
+      - ./watt-brief.env
+    environment:
+      TRUST_CF_CONNECTING_IP: "true"
+      FACTS_SOURCE: fixture
+      SPEND_DB_PATH: /app/data/spend.sqlite
+      KILL_SWITCH_FILE: /app/data/KILL_SWITCH
+    volumes:
+      # Create the directory first and chown it to uid 1000. `touch ./watt-brief-data/KILL_SWITCH`
+      # on the host stops all model calls; delete it to resume.
+      - ./watt-brief-data:/app/data
+    networks:
+      - watt-net
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+networks:
+  watt-net: {}

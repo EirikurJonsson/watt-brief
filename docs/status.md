@@ -18,7 +18,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 10. [x] Alerts: spend, error spike, abuse pattern, bans, kill switch. Logs only for now (decision: no webhook yet; ALERT_WEBHOOK_URL is ready when wanted)
 11. [x] Abuse controls: rate limit, temporary bans, persisted daily spend cap, kill switch, concurrency and body limits
 12. [x] UI: one plain HTML page with strict CSP, checked in a real browser (ADR 004, scripts/ui_check.mjs)
-13. [ ] Deploy on the home server behind Cloudflare Tunnel
+13. [ ] Deploy on the home server behind Cloudflare Tunnel. Repo side done and checked as far as possible without Docker (Dockerfile, compose fragment, CI/CD, smoke script, runbook in docs/deploy.md). Needs from Eirikur: GitHub secrets, server env file and compose merge over SSH, Cloudflare hostname route. First real image build happens in CI.
 14. [ ] Write up cost, latency, attacks seen, and what broke
 
 ## What broke

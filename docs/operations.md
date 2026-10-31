@@ -1,6 +1,7 @@
 # Operations
 
 Single instance, one process. Bind to localhost and expose only through the Cloudflare Tunnel.
+Deployment steps: [deploy.md](deploy.md).
 
 ```
 uv run python -m watt_brief.serve     # 127.0.0.1:8000
@@ -10,7 +11,7 @@ uv run python -m watt_brief.serve     # 127.0.0.1:8000
 
 | Control | Where | Default |
 |---|---|---|
-| Kill switch | create the file `KILL_SWITCH` (setting `KILL_SWITCH_FILE`) to stop all model calls, delete it to resume | off |
+| Kill switch | create the file `KILL_SWITCH` (setting `KILL_SWITCH_FILE`) to stop all model calls, delete it to resume. In the container: `touch watt-brief-data/KILL_SWITCH` next to the compose file | off |
 | Daily spend cap | `DAILY_SPEND_CAP_USD`, counted in a SQLite file so a restart cannot reset it | $1.00 |
 | Rate limit | `RATE_LIMIT_PER_MINUTE`, `RATE_LIMIT_PER_DAY`, per client | 6 / 100 |
 | Temporary ban | 10 guard rejections in 10 minutes bans a client for an hour | on |

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
     max_output_tokens: int = 1000
 
+    # Where to listen. Localhost by default; the container sets 0.0.0.0 and is only ever
+    # reachable through the Docker network that cloudflared shares.
+    serve_host: str = "127.0.0.1"
+    serve_port: int = 8000
+
     # Service. "fixture" serves synthetic data and says so in every response.
     facts_source: Literal["fixture", "entsoe"] = "fixture"
 
