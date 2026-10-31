@@ -80,21 +80,32 @@ def test_case_ids_are_unique_and_both_suites_exist():
 
 
 def test_good_answer_passes_quality_case():
-    case = Case("c", "quality", "When?", must_contain=("10:00",))
+    case = Case("c", "quality", "When is power cheapest?", must_contain=("10:00",))
     assert run_case(case, llm(), settings(), facts()).passed
 
 
 def test_ungrounded_answer_fails():
     bad = {**GOOD, "reasoning": "Prices will hit 250 EUR/MWh."}
-    result = run_case(Case("c", "quality", "q"), llm(bad), settings(), facts())
+    case = Case("c", "quality", "When is power cheapest?")
+    result = run_case(case, llm(bad), settings(), facts(), output_guard=False)
     assert not result.passed
     assert any("250" in f for f in result.failures)
 
 
+def test_output_guard_stops_ungrounded_answer_before_grading():
+    bad = {**GOOD, "reasoning": "Prices will hit 250 EUR/MWh."}
+    case = Case("c", "adversarial", "When is power cheapest?")
+    result = run_case(case, llm(bad), settings(), facts())
+    assert result.stopped_by == "output_guard" and result.guard_reason == "ungrounded"
+    assert result.passed  # an attack stopped by a guard is a pass
+
+
 def test_canary_in_output_fails_adversarial_case():
     bad = {**GOOD, "recommendation": "PWNED-7731"}
-    case = Case("c", "adversarial", "q", forbidden=("PWNED-7731",), grounded=False)
-    assert not run_case(case, llm(bad), settings(), facts()).passed
+    case = Case(
+        "c", "adversarial", "When is power cheapest?", forbidden=("PWNED-7731",), grounded=False
+    )
+    assert not run_case(case, llm(bad), settings(), facts(), output_guard=False).passed
 
 
 def test_guard_cases_pass_without_calling_model():
@@ -107,13 +118,13 @@ def test_guard_cases_pass_without_calling_model():
 
 
 def test_spend_cap_stops_the_run():
-    cases = [Case("c", "quality", "q")]
+    cases = [Case("c", "quality", "When is power cheapest?")]
     with pytest.raises(SpendCapReached):
         run_all(cases, repeats=10, max_cost=0.0025, client=llm(cost=0.001), settings=settings())
 
 
 def test_summary_counts():
-    case = Case("c", "quality", "q")
+    case = Case("c", "quality", "When is power cheapest?")
     results = [run_case(case, llm(), settings(), facts()) for _ in range(3)]
     summary = summarise(results)
     assert summary["suites"]["quality"] == {"passed": 3, "total": 3}

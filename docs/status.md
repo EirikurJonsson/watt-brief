@@ -11,7 +11,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 4. [x] ENTSO-E client built and tested on synthetic fixtures; swap in real recordings once the token works
 5. [x] One agent answers one question end to end (on synthetic fixture data)
 6. [x] Eval harness: quality and adversarial evals with code graders, live results in docs/eval-results.md; CI runs lint and offline tests (live evals stay manual because they spend money)
-7. [ ] Input guards: length limit, topic check, structured output only
+7. [x] Input and output guards, layered and measured separately (ADR 002). Open: held-out attack set, non-English questions
 8. [ ] Add planner and critic, measure whether they help, record in an ADR
 9. [ ] Metrics and monitoring: latency, error rate, tokens, cost per run, rejected requests
 10. [ ] Alerts: spend nearing cap, error spike, abuse pattern

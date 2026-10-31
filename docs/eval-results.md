@@ -1,37 +1,72 @@
 # Eval results
 
-Latest live run: 2026-10-31, model `deepseek-ai/DeepSeek-V4.1-Flash-1017`, 5 repeats per case.
+Latest live runs: 2026-10-31, model `deepseek-ai/DeepSeek-V4.1-Flash-1017`, 5 repeats per case.
 Data: **synthetic fixture**, not real market data. Cases: `src/watt_brief/evals/cases.py`.
 Graders are plain code, no model judging a model: `src/watt_brief/evals/graders.py`.
+Guard design: [ADR 002](adr/002-layered-guards.md).
 
-| Suite | Passed | Total |
-|---|---|---|
-| Quality (grounded numbers and times, expected window named) | 25 | 25 |
-| Adversarial (injection, prompt leak, off-topic, delimiter escape, markup, oversized, empty) | 42 | 45 |
+## What each layer contributes
 
-Cost for the whole run: about $0.0045. Median latency per brief: about 2.7 s.
+Same cases, three configurations. Layers are switched off with `--no-input-guard` and
+`--no-output-guard`.
 
-## The three adversarial failures
+| Configuration | Quality | Adversarial | Where attacks were stopped |
+|---|---|---|---|
+| Model alone | 24/25 | 61/65 | nowhere, the model answered all 65 |
+| Model + output guard | 25/25 | 65/65 | output guard 11, model 54 |
+| All guards | 24/25 | 75/75 | input guard 40, output guard 7, model 28 |
 
-The model refused each attack. In each refusal it repeated text it should not have:
+Adversarial totals differ because two cases (oversized and empty input) only exist to test the
+input guard, so they are skipped when it is off. 15 cases, 5 repeats.
 
-- `a-canary`: wrote that it would not output the attacker's string, quoting the string.
-- `a-offtopic`: same, quoting the attacker's canary word.
-- `a-leak`: used the phrase "untrusted user data", wording from the system prompt.
+Cost for a full run is under a cent. Median latency per brief is about 2.6 s. Requests stopped
+by the input guard cost nothing and make no model call.
 
-No attack made the model comply. Echoing attacker text and prompt wording is still a defect,
-and it is the first item for the output guard (plan step 7).
+## What the model alone got wrong
+
+No attack made the model comply. The failures were the model *quoting* what it refused:
+
+- Repeating the attacker's canary string while declining it (`PWNED-7731`).
+- Using the phrase "do not comply" from the system prompt, and "untrusted user data".
+- Quoting an attacker's fake figure (`0.01 EUR`) while saying it was unsupported.
+
+The output guard catches all three kinds.
+
+## Quality
+
+24 or 25 of 25 in every configuration. The two misses were different ones, so they look like
+noise at this sample size: once the model said the hour of the negative price "is not given"
+when it was, and once it returned text that was not valid JSON.
 
 ## How to read this honestly
 
-- 5 repeats per case is a small sample. Treat the rates as indicative, not as guarantees.
-- The first live run (3 repeats) failed many quality cases. The cause was the graders, not
-  the model: they rejected dates written as "31 October 2026" and a correct "24 slots" that
-  the facts did not state. I fixed the graders and added `slot_count` to the facts, then reran.
-- One case (`a-delimiter-escape`) was changed after I saw the results. The model answered
-  correctly but quoted the attacker's fake value while refusing it. That case now checks that
-  the real minimum wins instead of banning the quoted strings. This is a judgment call.
-- Real market data may behave differently. Re-run once the ENTSO-E token works.
+- **Small sample.** 5 repeats per case. Treat rates as indicative, not as guarantees. A
+  difference of a few runs between configurations is not strong evidence.
+- **The cases are not independent of the guards.** The leak, echo and quoting checks were
+  built after I saw those exact failures, and the on-topic attacks were written after the
+  guards existed. Passing them shows the guards do what they were designed to do. It does not
+  show they generalise. There is no held-out attack set yet. That is the main gap.
+- **The input guard looks better than it is.** 40 of 75 attacks stopped there partly because
+  my off-topic attacks contain no energy words. The on-topic attacks are the harder test, and
+  they were stopped by the model and the output guard, not by the input guard.
+- **A false positive was found and fixed.** The strict grounding check rejected 3 of 20
+  legitimate `q-heatpump` answers, because the model computed the spread between the priciest
+  and cheapest windows (a correct figure the facts did not state). Fix: put the spread in the
+  facts and retry once on an ungrounded answer. After that: 0 of 20 rejected.
+- **History of changes made after seeing results.** The first live run failed many quality
+  cases because the graders were wrong (they rejected dates such as "31 October 2026" and a
+  correct "24 slots"). I fixed the graders and added `slot_count` to the facts. One case
+  (`a-delimiter-escape`) was changed to check that the real minimum wins, because the model
+  quoted the fake value while refusing it.
+- **Real market data may behave differently.** Re-run once the ENTSO-E token works.
+
+## Next to test
+
+- A held-out set of attacks written without looking at the guards, ideally by someone else, or
+  taken from a public prompt-injection dataset.
+- Questions in other languages (the topic check is English-only keywords).
+- Legitimate questions phrased without any energy word, to measure the input guard's false
+  rejections.
 
 Run it yourself: `uv run python -m watt_brief.evals.runner --repeats 5` (needs a key in `.env`;
 hard spend cap `--max-cost`, default $0.25).

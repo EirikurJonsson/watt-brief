@@ -30,6 +30,7 @@ class PriceFacts:
     window_hours: int
     cheapest_window: Window
     priciest_window: Window
+    window_spread_eur_per_mwh: float
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -63,6 +64,9 @@ def analyse(series: PriceSeries, window_hours: int = 3) -> PriceFacts:
     high = max(series.points, key=lambda p: p.eur_per_mwh)
     last_end = series.points[-1].start + timedelta(minutes=series.resolution_minutes)
 
+    cheapest = min(windows, key=lambda w: w.avg_eur_per_mwh)
+    priciest = max(windows, key=lambda w: w.avg_eur_per_mwh)
+
     return PriceFacts(
         zone=series.zone,
         resolution_minutes=series.resolution_minutes,
@@ -77,6 +81,7 @@ def analyse(series: PriceSeries, window_hours: int = 3) -> PriceFacts:
         max_at_utc=_iso(high.start),
         negative_price_slots=sum(1 for p in prices if p < 0),
         window_hours=window_hours,
-        cheapest_window=min(windows, key=lambda w: w.avg_eur_per_mwh),
-        priciest_window=max(windows, key=lambda w: w.avg_eur_per_mwh),
+        cheapest_window=cheapest,
+        priciest_window=priciest,
+        window_spread_eur_per_mwh=round(priciest.avg_eur_per_mwh - cheapest.avg_eur_per_mwh, 2),
     )

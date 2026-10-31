@@ -49,3 +49,7 @@ def test_quarter_hour_series():
     facts = analyse(q, window_hours=1)
     assert facts.cheapest_window.avg_eur_per_mwh == pytest.approx(95.0)
     assert facts.cheapest_window.end_utc == "2026-10-30T23:00Z"
+
+
+def test_window_spread_is_priciest_minus_cheapest():
+    assert analyse(full_day()).window_spread_eur_per_mwh == pytest.approx(136.0)
