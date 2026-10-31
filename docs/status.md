@@ -1,14 +1,23 @@
 # Status
 
+Treat this as a small production service facing hostile users, not a demo.
+Threats and mitigations: [threat-model.md](threat-model.md).
+
 ## Plan
 
 1. [x] Repo skeleton, config, ADR 001
-2. [ ] ENTSO-E client and one question answered end to end by a single agent
-3. [ ] Eval harness (fixed questions, scored) written before more agents
-4. [ ] Add planner and critic, measure whether they help, record in an ADR
-5. [ ] Deploy on the home server behind Cloudflare Tunnel, with rate limit and daily spend cap
-6. [ ] CI running the evals on every change
-7. [ ] Write up cost, latency and what broke
+2. [ ] Threat model written and reviewed (before any endpoint exists)
+3. [ ] Structured logging and request IDs from the first line of app code
+4. [ ] ENTSO-E client with a recorded fixture (works without the token)
+5. [ ] One agent answers one question end to end
+6. [ ] Eval harness: quality evals and adversarial evals (injection, off-topic, abuse), run in CI
+7. [ ] Input guards: length limit, topic check, structured output only
+8. [ ] Add planner and critic, measure whether they help, record in an ADR
+9. [ ] Metrics and monitoring: latency, error rate, tokens, cost per run, rejected requests
+10. [ ] Alerts: spend nearing cap, error spike, abuse pattern
+11. [ ] Abuse controls: per-IP rate limit, daily spend cap, kill switch
+12. [ ] Deploy on the home server behind Cloudflare Tunnel
+13. [ ] Write up cost, latency, attacks seen, and what broke
 
 ## What broke
 
