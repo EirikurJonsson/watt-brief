@@ -8,7 +8,15 @@ recommended decision, with the reasoning and the cost of producing it.
 > Example question: *Should a flexible consumer in Germany shift load to tomorrow's
 > cheapest hours?*
 
-**Status: early scaffold. Nothing here works yet.** See [docs/status.md](docs/status.md).
+**Status: working end to end on synthetic price data.** Real ENTSO-E data is waiting on an
+API token. Progress and open items: [docs/status.md](docs/status.md). Every response says
+which data it used.
+
+| Dark, with a real brief | Phone, light |
+|---|---|
+| ![Result card in dark mode](docs/images/ui_3_result_dark.png) | ![Result on a phone](docs/images/ui_4_result_phone_light.png) |
+
+*Screenshots show real model output on the synthetic fixture.*
 
 ## Why this exists
 
@@ -18,22 +26,25 @@ deployment, and a record of what broke.
 
 It is the open companion to the series *Past the Demo* at https://cpa-intel.tech.
 
-## How it works (planned)
+## How it works
 
 ```
-question ──► planner ──► analyst ──► critic ──► brief
-                │           │           │
-                └───── ENTSO-E day-ahead prices (public)
-                        every step logs tokens, cost, latency
+question -> input guard -> planner -> price facts -> analyst -> output guard -> brief
+              |                           |                          |
+              |                  numbers come from code     rejects leaks, echoes,
+        cheap, no model call                                 links and invented figures
 ```
 
-- **Planner:** turns the question into the data it needs.
-- **Analyst:** pulls the prices, does the numbers, drafts the recommendation.
-- **Critic:** attacks the draft. Is the data stale? Is the claim bigger than the evidence?
-- **Brief:** one page, recommendation first.
+- **Input guard:** length, Unicode, delimiter and topic checks before any model call.
+- **Planner:** turns the question into an enum-checked plan (zone, window hours, intent).
+- **Facts:** every number is computed by code from the price series, never by the model.
+- **Analyst:** writes the brief from those facts. It has no tools and no secrets.
+- **Output guard:** rejects a brief that leaks the prompt, echoes attacker text, contains
+  markup or links, or contains a figure that is not in the facts.
+- **Critic:** built and measured, off by default. See [ADR 003](docs/adr/003-planner-yes-critic-not-yet.md).
 
-Whether the planner and critic actually help is an open question. The eval harness
-decides, and the answer goes in an ADR either way.
+Each layer is measured on its own in [docs/eval-results.md](docs/eval-results.md), including
+what it got wrong.
 
 ## Data
 
@@ -50,10 +61,19 @@ Model names and base URL live in config, not in code. See
 
 ```
 cp .env.example .env     # add your keys
-# nothing to run yet
+uv sync
+uv run pytest            # offline, free
+uv run python -m watt_brief.serve    # http://127.0.0.1:8000
 ```
 
 Keys stay in `.env` and in the server's environment. Never in the repo, never in the client.
+Controls, metrics and alerts: [docs/operations.md](docs/operations.md).
+
+Run the UI checks against the running server (needs chromium; the API is mocked, so it is free):
+
+```
+node scripts/ui_check.mjs http://127.0.0.1:8000/ /tmp/watt-brief-shots
+```
 
 Smoke test your model endpoint before anything else:
 
@@ -74,7 +94,8 @@ curl "https://api.deepinfra.com/v1/openai/chat/completions" \
 
 ## Decisions
 
-All architecture decisions are in [docs/adr/](docs/adr/).
+Architecture decisions are in [docs/adr/](docs/adr/). The threat model is in
+[docs/threat-model.md](docs/threat-model.md).
 
 ## Licence
 

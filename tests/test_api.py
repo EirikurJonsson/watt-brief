@@ -95,7 +95,9 @@ def test_malformed_bodies_are_422(tmp_path, body):
 
 def test_oversized_body_is_413(tmp_path):
     with make_client(tmp_path) as client:
-        r = client.post("/api/brief", content=b"x" * 5000)
+        r = client.post(
+            "/api/brief", content=b"x" * 5000, headers={"content-type": "application/json"}
+        )
     assert r.status_code == 413
 
 
@@ -226,3 +228,57 @@ def test_garbage_cloudflare_header_falls_back_to_the_socket_address(tmp_path):
         headers = {"cf-connecting-ip": "not-an-ip"}
         assert client.post("/api/brief", json=Q, headers=headers).status_code == 200
         assert client.post("/api/brief", json=Q, headers=headers).status_code == 429
+
+
+def test_non_json_content_type_is_415(tmp_path):
+    with make_client(tmp_path) as client:
+        r = client.post(
+            "/api/brief",
+            content=json.dumps(Q),
+            headers={"content-type": "text/plain"},
+        )
+        form = client.post("/api/brief", data=Q)
+    assert r.status_code == 415 and form.status_code == 415
+
+
+def test_index_page_and_assets_are_served_with_a_strict_csp(tmp_path):
+    with make_client(tmp_path) as client:
+        page = client.get("/")
+        script = client.get("/static/app.js")
+        style = client.get("/static/style.css")
+    assert page.status_code == 200 and "watt-brief" in page.text
+    assert script.status_code == 200 and style.status_code == 200
+    csp = page.headers["content-security-policy"]
+    assert "default-src 'self'" in csp
+    assert "unsafe-inline" not in csp and "unsafe-eval" not in csp
+
+
+def test_static_path_traversal_is_blocked(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.get("/static/../config.py").status_code == 404
+        assert client.get("/static/%2e%2e/config.py").status_code == 404
+
+
+def test_page_has_no_inline_script_or_style_and_no_unsafe_dom_apis():
+    root = Path(__file__).resolve().parents[1] / "src/watt_brief/static"
+    html = (root / "index.html").read_text()
+    js = (root / "app.js").read_text()
+    # inline code would need a weaker CSP
+    assert "<style" not in html and ' style="' not in html
+    assert all("src=" in tag for tag in html.split("<script")[1:])
+    assert "onclick" not in html.lower() and "javascript:" not in html.lower()
+    # everything from the server must go through textContent
+    for banned in (
+        "innerHTML",
+        "outerHTML",
+        "insertAdjacentHTML",
+        "document.write",
+        "eval(",
+        "new Function",
+    ):
+        assert banned not in js, banned
+
+
+def test_healthz_reports_the_data_source(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.get("/healthz").json()["data_source"] == "synthetic"

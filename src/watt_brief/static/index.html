@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>watt-brief</title>
+  <meta name="description" content="Ask about European day-ahead electricity prices. Get a one-page brief that ends in a decision.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="site">
+    <a class="brand" href="/">watt-brief</a>
+    <span class="tag">Energy decisions, not energy dashboards.</span>
+  </header>
+
+  <main>
+    <div id="data-banner" class="banner" role="note" hidden></div>
+
+    <form id="ask" novalidate>
+      <label for="question">Your question</label>
+      <textarea id="question" name="question" rows="3" maxlength="500" required
+        placeholder="When should my heat pump run tomorrow in Germany?"></textarea>
+      <div class="row">
+        <span id="count" class="muted">0 / 500</span>
+        <button type="submit" id="submit">Get brief</button>
+      </div>
+      <div class="examples">
+        <span class="muted">Try:</span>
+        <button type="button" class="chip">I need 3 hours of power tomorrow in Germany. When should I run my heat pump?</button>
+        <button type="button" class="chip">When is electricity most expensive tomorrow?</button>
+        <button type="button" class="chip">Are there negative prices tomorrow, and when?</button>
+      </div>
+    </form>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="result" class="card" tabindex="-1" aria-live="polite" hidden>
+      <h2>Recommendation</h2>
+      <p id="rec" class="rec"></p>
+      <h3>Why</h3>
+      <p id="reason"></p>
+      <h3>Caveats</h3>
+      <ul id="caveats"></ul>
+      <p id="meta" class="meta muted"></p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Day-ahead prices, EUR per MWh, times in UTC. Guidance only, not financial advice.</p>
+    <p><a href="https://github.com/EirikurJonsson/watt-brief">Source, decisions and eval results</a></p>
+  </footer>
+</body>
+</html>

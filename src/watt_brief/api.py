@@ -11,11 +11,13 @@ import logging
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from watt_brief.alerts import AlertManager
@@ -31,13 +33,16 @@ from watt_brief.sources import build_facts_source
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 4096
+STATIC_DIR = Path(__file__).parent / "static"
 
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": (
+        "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    ),
 }
 
 MESSAGES = {
@@ -48,6 +53,7 @@ MESSAGES = {
     "busy": "The service is busy. Try again in a moment.",
     "bad_request": 'Send JSON like {"question": "When is power cheapest tomorrow?"}.',
     "too_large": "That request is too large.",
+    "bad_type": "Send the request as application/json.",
     "error": "Something went wrong. Try again later.",
     "model_error": "I couldn't produce a brief right now. Try again later.",
 }
@@ -153,6 +159,11 @@ def create_app(
         if spend.today() >= settings.daily_spend_cap_usd:
             return finish("budget", 503, {"error": MESSAGES["budget"]}, started, 3600)
 
+        # Requiring JSON forces a CORS preflight, which another website cannot pass, so a
+        # visitor's browser cannot be tricked into spending our budget with a plain form post.
+        if not request.headers.get("content-type", "").lower().startswith("application/json"):
+            return finish("rejected", 415, {"error": MESSAGES["bad_type"]}, started)
+
         raw = await read_limited(request)
         if raw is None:
             return finish("rejected", 413, {"error": MESSAGES["too_large"]}, started)
@@ -206,7 +217,11 @@ def create_app(
         used = spend.today() / cap if cap > 0 else 1.0
         killed = kill.active()
         status = "degraded" if killed or used >= 1.0 else "ok"
-        return {"status": status, "spend_used_pct": round(min(used, 9.99) * 100)}
+        return {
+            "status": status,
+            "spend_used_pct": round(min(used, 9.99) * 100),
+            "data_source": "synthetic" if settings.facts_source == "fixture" else "entsoe",
+        }
 
     @app.get("/metrics")
     async def metrics_endpoint(request: Request):
@@ -221,5 +236,11 @@ def create_app(
         return PlainTextResponse(
             metrics.render().decode(), media_type="text/plain; version=0.0.4; charset=utf-8"
         )
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        return FileResponse(STATIC_DIR / "index.html")
+
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app
