@@ -7,7 +7,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 
 1. [x] Repo skeleton, config, ADR 001
 2. [ ] Threat model written and reviewed (before any endpoint exists)
-3. [ ] Structured logging and request IDs from the first line of app code
+3. [x] Structured logging and request IDs from the first line of app code
 4. [ ] ENTSO-E client with a recorded fixture (works without the token)
 5. [ ] One agent answers one question end to end
 6. [ ] Eval harness: quality evals and adversarial evals (injection, off-topic, abuse), run in CI
