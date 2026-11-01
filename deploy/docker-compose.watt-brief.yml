@@ -47,6 +47,12 @@ services:
       - ./watt-brief-data:/app/data
     networks:
       - watt-net
+    # Cap the container logs, or they grow until the disk is full.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test:
         - CMD

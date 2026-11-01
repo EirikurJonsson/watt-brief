@@ -65,5 +65,7 @@ real layout bugs while the page was being built.
 
 - Only one zone has data, and it is synthetic. The chart code handles days of 23 or 25 hours
   and 15-minute prices, but that has only been exercised with the synthetic day.
-- Only checked in Chromium. Firefox and Safari are untested.
+- Interactions (hover, keyboard, table, forms) are only driven in Chromium. Firefox was checked
+  for rendering with static screenshots at desktop and phone widths and draws the same page.
+  Safari is untested: there is no WebKit engine available to test with.
 - The brackets' label placement is a heuristic for a single pair of windows.

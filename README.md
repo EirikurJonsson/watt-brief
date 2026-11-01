@@ -8,6 +8,8 @@ recommended decision, with the reasoning and the cost of producing it.
 > Example question: *Should a flexible consumer in Germany shift load to tomorrow's
 > cheapest hours?*
 
+**Live demo: https://watt-brief.cpa-intel.tech**
+
 **Status: working end to end on synthetic price data.** Real ENTSO-E data is waiting on an
 API token. Progress and open items: [docs/status.md](docs/status.md). Every response says
 which data it used.

@@ -354,3 +354,22 @@ def test_font_is_served_from_our_own_origin(tmp_path):
     assert r.status_code == 200 and len(r.content) > 10_000
     assert r.headers["content-type"].startswith("font/woff2")
     assert licence.status_code == 200 and "SIL Open Font License" in licence.text
+
+
+def test_privacy_page_is_served_and_linked_from_the_footer(tmp_path):
+    with make_client(tmp_path) as client:
+        page = client.get("/privacy")
+        home = client.get("/")
+    assert page.status_code == 200 and "We do not store your question" in page.text
+    assert 'href="/privacy"' in home.text
+    assert "unsafe-inline" not in page.headers["content-security-policy"]
+
+
+def test_page_has_link_preview_tags_and_the_image_exists(tmp_path):
+    with make_client(tmp_path) as client:
+        html = client.get("/").text
+        image = client.get("/static/og.png")
+    for tag in ("og:title", "og:description", "og:image", "twitter:card"):
+        assert tag in html
+    assert image.status_code == 200 and image.headers["content-type"] == "image/png"
+    assert image.content[:8] == b"\x89PNG\r\n\x1a\n"

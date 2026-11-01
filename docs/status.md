@@ -23,4 +23,4 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 
 ## What broke
 
-Nothing yet. This file is where it goes when it does.
+A lot, and it is written up honestly in [what-broke.md](what-broke.md).

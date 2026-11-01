@@ -412,6 +412,13 @@ a:hover { text-decoration-thickness: 2px; }
   @keyframes settle { from { opacity: 0; } to { opacity: 1; } }
 }
 
+/* plain text pages */
+.prose { padding-block: clamp(1.5rem, 4vw, 3rem) 3rem; }
+.prose h1 { margin: 0 0 1rem; font-size: clamp(2rem, 5vw, 3rem); font-weight: 720; letter-spacing: -0.03em; line-height: 1.05; }
+.prose h2 { margin: 2rem 0 0.4rem; font-size: 1.25rem; font-weight: 650; }
+.prose p { max-width: 40rem; margin: 0 0 0.75rem; }
+.prose .updated { margin-top: 2rem; color: var(--ink-2); font-size: 0.9rem; }
+
 /* footer */
 .foot {
   margin-top: 1rem;

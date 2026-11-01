@@ -1,6 +1,7 @@
 """Thin OpenAI-compatible chat client. Records tokens, latency and cost per call. See ADR 001."""
 
 import logging
+import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,16 +28,25 @@ class Completion:
     cost_usd: float | None  # None when neither the provider nor config gives a price
 
 
+# Transient: worth another try. Anything else (bad key, bad request) is not.
+RETRY_STATUSES = {408, 429, *range(500, 600)}
+MAX_RETRY_AFTER_SECONDS = 5.0
+
+
 class LLMClient:
     def __init__(
         self,
         settings: Settings,
         transport: httpx.BaseTransport | None = None,
         on_completion: Callable[[str, Completion], None] | None = None,
+        on_retry: Callable[[str, str], None] | None = None,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         self._settings = settings
         # Called for every successful call, so spend is counted even if the request later fails.
         self._on_completion = on_completion
+        self._on_retry = on_retry
+        self._sleep = sleep
         self._http = httpx.Client(
             base_url=settings.llm_base_url,
             headers={"Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"},
@@ -55,7 +65,7 @@ class LLMClient:
         }
         start = time.perf_counter()
         try:
-            response = self._http.post("/chat/completions", json=payload)
+            response = self._post_with_retries(step, model, payload, start)
             response.raise_for_status()
             body = response.json()
             text = body["choices"][0]["message"]["content"]
@@ -91,6 +101,51 @@ class LLMClient:
             cost_usd=completion.cost_usd,
         )
         return completion
+
+    def _post_with_retries(
+        self, step: str, model: str, payload: dict, start: float
+    ) -> httpx.Response:
+        """POST, retrying transient failures with backoff inside a total time budget."""
+        s = self._settings
+        attempt = 0
+        while True:
+            retry_after: float | None = None
+            try:
+                response = self._http.post("/chat/completions", json=payload)
+                if response.status_code not in RETRY_STATUSES:
+                    return response
+                reason = f"http_{response.status_code}"
+                header = response.headers.get("retry-after", "")
+                if header.isdigit():
+                    retry_after = min(float(header), MAX_RETRY_AFTER_SECONDS)
+                last: httpx.Response | None = response
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                reason = type(exc).__name__
+                last = None
+
+            delay = (
+                retry_after
+                if retry_after is not None
+                else 0.5 * 2**attempt + random.random() * 0.25
+            )
+            elapsed = time.perf_counter() - start
+            if attempt >= s.llm_max_retries or elapsed + delay > s.llm_retry_budget_seconds:
+                if last is not None:
+                    return last  # the caller turns the final error status into an LLMError
+                raise httpx.TransportError(reason)
+            attempt += 1
+            log(
+                logger,
+                "llm_retry",
+                step=step,
+                model=model,
+                attempt=attempt,
+                reason=reason,
+                delay_s=round(delay, 2),
+            )
+            if self._on_retry:
+                self._on_retry(step, reason)
+            self._sleep(delay)
 
     def _cost(self, usage: dict, input_tokens: int, output_tokens: int) -> float | None:
         reported = usage.get("estimated_cost")

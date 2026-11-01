@@ -24,6 +24,12 @@ class Metrics:
         self.llm_calls = Counter(
             "wb_llm_calls_total", "Model calls by step", ["step"], registry=self.registry
         )
+        self.llm_retries = Counter(
+            "wb_llm_retries_total",
+            "Model call retries by reason",
+            ["reason"],
+            registry=self.registry,
+        )
         self.llm_tokens = Counter(
             "wb_llm_tokens_total", "Tokens", ["direction"], registry=self.registry
         )

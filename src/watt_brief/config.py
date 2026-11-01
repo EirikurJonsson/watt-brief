@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     use_planner: bool = True
     use_critic: bool = False
 
-    llm_timeout_seconds: float = 60.0
+    # Per attempt. Transient failures are retried within the total budget below.
+    llm_timeout_seconds: float = 30.0
+    llm_max_retries: int = 2
+    llm_retry_budget_seconds: float = 40.0
     max_output_tokens: int = 1000
 
     # Where to listen. Localhost by default; the container sets 0.0.0.0 and is only ever

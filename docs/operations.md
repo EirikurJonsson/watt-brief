@@ -56,3 +56,13 @@ Evaluated after every request. Each fires at most once per 30 minutes.
 
 Alerts always go to the log (WARNING or ERROR). Set `ALERT_WEBHOOK_URL` to also POST
 `{"text": "..."}` to a webhook. The URL is never logged.
+
+## Model provider failures
+
+Transient failures (timeouts, connection errors, HTTP 408, 429 and 5xx) are retried up to
+`LLM_MAX_RETRIES` times (default 2) with exponential backoff, inside `LLM_RETRY_BUDGET_SECONDS`
+(default 40) per model call. A 429 `Retry-After` is honoured up to 5 seconds. Bad keys and bad
+requests (other 4xx) are never retried. Retries are counted in `wb_llm_retries_total{reason}`.
+A failed attempt costs nothing, because cost is counted from the response of the attempt that
+succeeded. A request makes at least two model calls (planner and analyst), so its worst case is
+longer than one call's budget; the page gives up after 60 seconds.

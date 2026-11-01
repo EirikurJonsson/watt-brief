@@ -95,7 +95,12 @@ def create_app(
         metrics.llm_tokens.labels("output").inc(completion.output_tokens)
         metrics.llm_cost.inc(cost)
 
-    llm = LLMClient(settings, transport=llm_transport, on_completion=on_completion)
+    llm = LLMClient(
+        settings,
+        transport=llm_transport,
+        on_completion=on_completion,
+        on_retry=lambda step, reason: metrics.llm_retries.labels(reason).inc(),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -270,6 +275,10 @@ def create_app(
     @app.get("/", include_in_schema=False)
     async def index():
         return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/privacy", include_in_schema=False)
+    async def privacy():
+        return FileResponse(STATIC_DIR / "privacy.html")
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
