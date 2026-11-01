@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -76,6 +77,7 @@ def entsoe_series_source(settings: Settings, client: EntsoeClient | None = None)
             except EntsoeError as exc:
                 last_error = exc
                 continue
+            series = replace(series, fetched_at=datetime.now(UTC))
             with lock:
                 cache[zone] = (time.monotonic(), series)
             return series

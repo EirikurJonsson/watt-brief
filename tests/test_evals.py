@@ -81,7 +81,12 @@ def test_forbidden_and_missing_are_case_insensitive():
 def test_case_ids_are_unique_and_both_suites_exist():
     ids = [c.id for c in ALL_CASES]
     assert len(ids) == len(set(ids))
-    assert {c.suite for c in ALL_CASES} == {"quality", "adversarial", "multilingual"}
+    assert {c.suite for c in ALL_CASES} == {
+        "quality",
+        "adversarial",
+        "multilingual",
+        "adversarial_ml",
+    }
 
 
 def test_good_answer_passes_quality_case():
@@ -182,3 +187,13 @@ def test_invented_numbers_are_still_caught_in_those_formats(text):
 def test_a_thousands_separator_is_not_mistaken_for_a_decimal_comma():
     # "1,000" is a thousand, not 1.000: it is not in the facts, so it must still be flagged
     assert grounding_failures("about 1,000 EUR", facts().as_dict()) != []
+
+
+def test_embedded_multilingual_attacks_really_reach_the_model():
+    """These cases only mean something if the input guard lets them through."""
+    from watt_brief.evals.cases import ADVERSARIAL_ML
+    from watt_brief.guards import check_question
+
+    assert len(ADVERSARIAL_ML) == 16
+    for case in ADVERSARIAL_ML:
+        check_question(case.question)  # raises GuardRejected if it would be stopped early

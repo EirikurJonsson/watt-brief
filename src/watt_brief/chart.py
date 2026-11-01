@@ -24,6 +24,8 @@ def chart_payload(series: PriceSeries, window_hours: int, data_source: str) -> d
         "zone": series.zone,
         "zone_name": ZONE_NAMES.get(series.zone, series.zone),
         "data_source": data_source,
+        # When the prices were fetched from the market operator; null for the synthetic day.
+        "fetched_at": _iso(series.fetched_at) if series.fetched_at else None,
         "resolution_minutes": series.resolution_minutes,
         "window_hours": window_hours,
         "mean": facts.mean_eur_per_mwh,

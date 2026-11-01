@@ -84,3 +84,25 @@ def test_entsoe_source_reports_no_data_when_nothing_is_published():
     source = entsoe_source(lambda req: httpx.Response(200, text=NO_DATA))
     with pytest.raises(NoDataError):
         source("DE_LU")
+
+
+def test_entsoe_series_records_when_it_was_fetched_and_keeps_it_while_cached():
+    source = entsoe_source(lambda req: httpx.Response(200, text=XML))
+    before = datetime.now(UTC)
+    first = source("DE_LU")
+    second = source("DE_LU")
+    assert first.fetched_at is not None and before <= first.fetched_at <= datetime.now(UTC)
+    assert second.fetched_at == first.fetched_at
+
+
+def test_fixture_series_has_no_fetch_time():
+    assert fixture_series_source()("DE_LU").fetched_at is None
+
+
+def test_chart_payload_shows_the_fetch_time_for_real_data_only():
+    from watt_brief.chart import chart_payload
+
+    real = entsoe_source(lambda req: httpx.Response(200, text=XML))("DE_LU")
+    payload = chart_payload(real, 3, "entsoe")
+    assert payload["fetched_at"] == real.fetched_at.strftime("%Y-%m-%dT%H:%MZ")
+    assert chart_payload(fixture_series_source()("DE_LU"), 3, "synthetic")["fetched_at"] is None

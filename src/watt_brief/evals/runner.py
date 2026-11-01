@@ -202,7 +202,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--max-cost", type=float, default=0.25, help="USD hard stop")
-    parser.add_argument("--suite", choices=["quality", "adversarial", "multilingual"])
+    parser.add_argument(
+        "--suite", choices=["quality", "adversarial", "multilingual", "adversarial_ml"]
+    )
     parser.add_argument("--case", help="run only this case id")
     parser.add_argument("--no-input-guard", action="store_true", help="measure the model alone")
     parser.add_argument("--no-output-guard", action="store_true")

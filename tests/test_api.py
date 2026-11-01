@@ -305,6 +305,7 @@ def test_prices_endpoint_returns_the_curve_and_both_windows(tmp_path):
     }
     assert data["priciest_window"]["avg"] == 139.0
     assert data["mean"] == 69.25
+    assert data["fetched_at"] is None  # the synthetic day is not fetched from anywhere
     assert r.headers["cache-control"] == "public, max-age=300"
 
 

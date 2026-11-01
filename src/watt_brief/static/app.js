@@ -222,7 +222,8 @@
     const source =
       c.data_source === "synthetic"
         ? "Synthetic demo data, not market prices."
-        : "Day-ahead prices from ENTSO-E.";
+        : "Day-ahead prices from ENTSO-E" +
+          (c.fetched_at ? ", fetched " + utcHM(new Date(c.fetched_at)) + " UTC." : ".");
     $("context").textContent = upperFirst(c.zone_name) + ", " + dayText + ". " + source;
 
     const from = new Date(c.cheapest_window.start);

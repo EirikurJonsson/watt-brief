@@ -50,6 +50,7 @@ class PriceSeries:
     zone: str
     resolution_minutes: int
     points: list[PricePoint]
+    fetched_at: datetime | None = None  # UTC; None for the synthetic fixture, which is not fetched
 
 
 def _local(tag: str) -> str:
