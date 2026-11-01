@@ -54,8 +54,18 @@ Evaluated after every request. Each fires at most once per 30 minutes.
 | `bans_active` | warning | any client is banned |
 | `kill_switch` | critical | kill switch on |
 
-Alerts always go to the log (WARNING or ERROR). Set `ALERT_WEBHOOK_URL` to also POST
-`{"text": "..."}` to a webhook. The URL is never logged.
+Alerts always go to the log (WARNING or ERROR). Set `ALERT_WEBHOOK_URL` to also send them to a
+webhook. The URL is never logged, because it can hold a token.
+
+`ALERT_WEBHOOK_FORMAT` picks the body:
+- `json` (default): `{"text": "[watt-brief critical] ..."}`, which Slack-style hooks accept.
+- `ntfy`: the message as plain text, with `Title`, `Priority` (`high` for critical, `default` for
+  warnings) and `Tags` headers. Use `https://ntfy.sh/<topic>` or your own ntfy server.
+
+On ntfy.sh anyone who knows the topic name can read it and post to it. Use a long random topic
+(for example `openssl rand -hex 16`), keep it only in the server env file, and treat it like a key.
+Alerts contain counts and percentages, never question text. In-process alerts cannot fire when the
+service is down, so also point an external uptime check at `/healthz`.
 
 ## Model provider failures
 

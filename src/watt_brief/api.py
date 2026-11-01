@@ -77,7 +77,7 @@ def create_app(
     kill = KillSwitch(settings.kill_switch_file)
     limiter = RateLimiter(settings.rate_limit_per_minute, settings.rate_limit_per_day)
     abuse = AbuseTracker()
-    alerts = AlertManager(settings.alert_webhook_url)
+    alerts = AlertManager(settings.alert_webhook_url, settings.alert_webhook_format)
     slots = threading.BoundedSemaphore(settings.max_concurrent_requests)
     series_source = get_series or build_series_source(settings)
     facts_source = get_facts or facts_from(series_source)

@@ -1,7 +1,8 @@
 """Alert rules. Pure evaluation plus a small manager that de-duplicates and notifies.
 
 Rules fire on spend nearing the cap, an error spike, an abuse pattern, and the kill switch.
-Notification is a structured log line, plus an optional webhook if one is configured.
+Notification is a structured log line, plus an optional webhook if one is configured. The webhook
+body is `{"text": ...}` JSON by default, or a plain-text ntfy message (`webhook_format="ntfy"`).
 """
 
 import logging
@@ -28,6 +29,22 @@ class Alert:
     name: str
     severity: str  # "warning" or "critical"
     message: str
+
+
+def webhook_request(alert: Alert, webhook_format: str) -> dict:
+    """httpx keyword arguments for one alert. Headers stay ASCII, which HTTP requires."""
+    text = f"[watt-brief {alert.severity}] {alert.message}"
+    if webhook_format == "ntfy":
+        critical = alert.severity == "critical"
+        return {
+            "content": alert.message.encode(),
+            "headers": {
+                "Title": f"watt-brief: {alert.name}",
+                "Priority": "high" if critical else "default",
+                "Tags": "rotating_light" if critical else "warning",
+            },
+        }
+    return {"json": {"text": text}}
 
 
 def evaluate(
@@ -70,10 +87,12 @@ class AlertManager:
     def __init__(
         self,
         webhook_url: str | None = None,
+        webhook_format: str = "json",
         clock: Callable[[], float] = time.monotonic,
-        post: Callable[[str, str], None] | None = None,
+        post: Callable[[str, Alert, str], None] | None = None,
     ):
         self._webhook_url = webhook_url
+        self._format = webhook_format
         self._clock = clock
         self._post = post or self._post_webhook
         self._last_fired: dict[str, float] = {}
@@ -104,13 +123,13 @@ class AlertManager:
                 message=alert.message,
             )
             if self._webhook_url:
-                self._post(self._webhook_url, f"[watt-brief {alert.severity}] {alert.message}")
+                self._post(self._webhook_url, alert, self._format)
         return fired
 
     @staticmethod
-    def _post_webhook(url: str, text: str) -> None:
+    def _post_webhook(url: str, alert: Alert, webhook_format: str) -> None:
         try:
-            httpx.post(url, json={"text": text}, timeout=5.0)
+            httpx.post(url, timeout=5.0, **webhook_request(alert, webhook_format))
         except httpx.HTTPError as exc:
             # Never let a broken notifier break the service; do not log the URL (may hold a token).
             log(logger, "alert_webhook_failed", kind=type(exc).__name__)

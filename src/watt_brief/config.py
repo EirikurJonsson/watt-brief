@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     # /metrics is disabled (404) unless this is set.
     metrics_token: SecretStr | None = None
     alert_webhook_url: str | None = None
+    # "ntfy" sends plain text with Title/Priority/Tags headers, as ntfy expects.
+    alert_webhook_format: Literal["json", "ntfy"] = "json"
 
     @field_validator("entsoe_api_token", "metrics_token", "alert_webhook_url", mode="before")
     @classmethod

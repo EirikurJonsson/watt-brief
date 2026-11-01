@@ -20,7 +20,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 12. [x] UI: plain HTML page with strict CSP, redesigned around the price chart (ADR 004, docs/design.md), checked in a real browser (scripts/ui_check.mjs)
 13. [ ] Deploy on the home server behind Cloudflare Tunnel. Repo side done and checked as far as possible without Docker (Dockerfile, compose fragment, CI/CD, smoke script, runbook in docs/deploy.md). Needs from Eirikur: GitHub secrets, server env file and compose merge over SSH, Cloudflare hostname route. First real image build happens in CI.
 14. [ ] Write up cost, latency, attacks seen, and what broke
-15. [ ] Alerts to ntfy (decided 1 Nov, not built). Today alerts only write to the log, so nobody sees them.
+15. [~] Alerts to ntfy (1 Nov). Code, tests and docs done: `ALERT_WEBHOOK_FORMAT=ntfy`. Not live until Eirikur picks a topic and sets the two env vars on the server; the external uptime check and a real end-to-end trigger are still open.
     - `alerts.py` posts JSON `{"text": ...}` to `ALERT_WEBHOOK_URL`. ntfy wants a plain-text body with
       optional `Title`, `Priority` and `Tags` headers, so add an `ALERT_WEBHOOK_FORMAT=ntfy` option
       (critical alerts at high priority, warnings at default).
