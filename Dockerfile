@@ -15,6 +15,9 @@ FROM python:3.13-slim
 # Fixed uid so the bind-mounted data directory on the host can be owned by the same user.
 RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin app \
     && mkdir -p /app/data && chown app:app /app/data
+# The app runs from /opt/venv and installs nothing at runtime, so the base image's package
+# installer is dead weight with its own vulnerable bundled libraries. Remove it.
+RUN python -m pip uninstall -y pip setuptools wheel
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /app /app
 ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 SERVE_HOST=0.0.0.0
