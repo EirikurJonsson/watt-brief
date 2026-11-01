@@ -27,7 +27,8 @@ _TOPIC_STEMS = (
     (
         r"electric|power|energy|price|prices|cost|tariff|cheap|expensive|kwh|mwh|\bkw\b|watt|grid|"
         r"charg|\bev\b|heat pump|boiler|battery|\bload\b|appliance|washing|dishwasher|negative|"
-        r"spot|day-ahead|peak|off-peak|solar|wind|usage|consum"
+        r"spot|day-ahead|peak|off-peak|solar|wind|usage|consum|"
+        r"dryer|laundry|oven|sauna|\bpool\b|heater|heating|air con|hvac|immersion|thermostat|hot water"
     ),
     # German
     (
@@ -51,6 +52,14 @@ _TOPIC_STEMS = (
     ),
 )
 _TOPIC = re.compile("|".join(_TOPIC_STEMS))
+
+# A second way in, for appliances no keyword list will ever finish: a question that asks when to
+# run, start, use or heat something is about timing a load. English only for now. It lets more
+# unusual questions reach the model, which the output guard, rate limits and spend cap exist for.
+_TIMING = re.compile(r"\b(when|what time|best time|which hour|what hour|best hour|cheapest time)\b")
+_ACTION = re.compile(
+    r"\b(run|start|turn on|switch on|turn up|use|charge|heat|cook|wash|boil|dry|do)\b"
+)
 
 _MARKUP = re.compile(
     r"[<>]|https?:|www\.|javascript:|"
@@ -92,7 +101,8 @@ def check_question(question: str) -> str:
         raise _reject("too_long", "input")
     if _DELIMITERS.search(cleaned):
         raise _reject("delimiter", "input")
-    if not _TOPIC.search(fold(cleaned)):
+    folded = fold(cleaned)
+    if not (_TOPIC.search(folded) or (_TIMING.search(folded) and _ACTION.search(folded))):
         raise _reject("off_topic", "input")
     return cleaned
 

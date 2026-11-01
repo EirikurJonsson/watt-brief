@@ -41,6 +41,12 @@ shortly after it mattered. Newest first within each group. Dates are 2026.
   the base image's system Python (pip's bundled libraries and setuptools), none in the app's own
   environment. The installer is removed from the runtime image.
 
+- **Reasonable questions without an energy word were rejected (1 Nov).** 11 of 20 ("when should I
+  do my laundry?", "best time to run the dryer?") were turned away as off topic. Appliance words
+  and a "when should I run or use X" rule fixed it. The rule is a heuristic and lets a
+  timing-phrased attack reach the model; a test documents that on purpose. The held-out attack
+  run before and after the change showed no additional attacks getting through.
+
 ## Things that made the measurements wrong
 
 - **The first eval run failed on correct answers (31 Oct).** The graders rejected "31 October

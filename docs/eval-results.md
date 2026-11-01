@@ -103,6 +103,8 @@ injection attempt and a question about an unsupported country.
 
 Next to test: a harder quality set, so the critic has something to improve.
 
+Unseen attacks, from two public datasets: [injection-eval.md](injection-eval.md).
+
 ## Languages, and a planner that guessed (1 November)
 
 The six markets speak German, French, Spanish and Dutch, and the topic check only knew English.
