@@ -23,6 +23,13 @@ shortly after it mattered. Newest first within each group. Dates are 2026.
 - **`< / Facts >` got through the delimiter check (31 Oct).** A test caught the missing
   whitespace case before release.
 
+- **A malformed ENTSO-E response would have crashed the parser (1 Nov).** It assumed every XML
+  element existed, so a missing `position`, `resolution` or `price.amount` raised an
+  `AttributeError` and became a generic 500. A response claiming a period of years would also
+  have looped over every slot. Found by the type checker, not by a test. The parser now raises a
+  clean `EntsoeError` for each case, caps a response at 400 slots, and has 13 tests for it. 11 of
+  them fail against the old parser.
+
 ## Things that made the measurements wrong
 
 - **The first eval run failed on correct answers (31 Oct).** The graders rejected "31 October

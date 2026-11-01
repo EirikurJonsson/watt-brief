@@ -60,8 +60,25 @@ def _find(node, name: str):
     return next((c for c in node.iter() if _local(c.tag) == name), None)
 
 
+def _text(node, name: str) -> str:
+    """The text of the first descendant called `name`. The response is untrusted, so a missing
+    or empty element is an error, never an AttributeError."""
+    found = _find(node, name) if node is not None else None
+    if found is None or found.text is None or not found.text.strip():
+        raise EntsoeError(f"response is missing {name}")
+    return found.text.strip()
+
+
 def _parse_time(text: str) -> datetime:
-    return datetime.strptime(text, "%Y-%m-%dT%H:%MZ").replace(tzinfo=UTC)
+    try:
+        return datetime.strptime(text, "%Y-%m-%dT%H:%MZ").replace(tzinfo=UTC)
+    except ValueError:
+        raise EntsoeError("response has a malformed time") from None
+
+
+# A day-ahead response covers about a day. Anything much longer is not what we asked for, and a
+# hostile or broken response must not make us loop over years of slots.
+MAX_SLOTS = 400
 
 
 def parse_day_ahead_xml(xml: str, zone: str) -> PriceSeries:
@@ -77,7 +94,7 @@ def parse_day_ahead_xml(xml: str, zone: str) -> PriceSeries:
     points: list[PricePoint] = []
     resolution: int | None = None
     for period in (n for n in root.iter() if _local(n.tag) == "Period"):
-        match = _RESOLUTION.match(_find(period, "resolution").text.strip())
+        match = _RESOLUTION.match(_text(period, "resolution"))
         if not match:
             raise EntsoeError("unsupported resolution")
         step = int(match.group(1))
@@ -85,14 +102,22 @@ def parse_day_ahead_xml(xml: str, zone: str) -> PriceSeries:
             raise EntsoeError("mixed resolutions in one response")
         resolution = step
 
-        start = _parse_time(_find(_find(period, "timeInterval"), "start").text.strip())
-        end = _parse_time(_find(_find(period, "timeInterval"), "end").text.strip())
+        interval = _find(period, "timeInterval")
+        start = _parse_time(_text(interval, "start"))
+        end = _parse_time(_text(interval, "end"))
+        if step <= 0 or end <= start:
+            raise EntsoeError("response has an invalid time interval")
         slots = int((end - start) / timedelta(minutes=step))
+        if slots > MAX_SLOTS:
+            raise EntsoeError("response covers too long a period")
 
         by_position = {}
         for point in (n for n in period if _local(n.tag) == "Point"):
-            position = int(_find(point, "position").text)
-            by_position[position] = float(_find(point, "price.amount").text)
+            try:
+                position = int(_text(point, "position"))
+                by_position[position] = float(_text(point, "price.amount"))
+            except ValueError:
+                raise EntsoeError("response has a malformed number") from None
 
         # A03 curves omit positions where the price did not change: carry the last one forward.
         last = None

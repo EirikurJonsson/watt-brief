@@ -105,3 +105,82 @@ def test_401_does_not_leak_token():
 def test_missing_token_fails_clearly():
     with pytest.raises(EntsoeError, match="ENTSOE_API_TOKEN"):
         EntsoeClient(settings(token=None))
+
+
+NS = 'xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"'
+
+
+def doc(period_body: str) -> str:
+    return f"<Publication_MarketDocument {NS}><TimeSeries><Period>{period_body}</Period></TimeSeries></Publication_MarketDocument>"
+
+
+GOOD_INTERVAL = (
+    "<timeInterval><start>2026-10-30T22:00Z</start><end>2026-10-30T23:00Z</end></timeInterval>"
+)
+GOOD_POINT = "<Point><position>1</position><price.amount>10.0</price.amount></Point>"
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # each piece of the response that we rely on, missing in turn
+        (f"{GOOD_INTERVAL}{GOOD_POINT}", "resolution"),
+        (f"<resolution>PT60M</resolution>{GOOD_POINT}", "timeInterval|start"),
+        (
+            "<resolution>PT60M</resolution><timeInterval><start>2026-10-30T22:00Z</start></timeInterval>"
+            + GOOD_POINT,
+            "end",
+        ),
+        (
+            f"<resolution>PT60M</resolution>{GOOD_INTERVAL}<Point><price.amount>10</price.amount></Point>",
+            "position",
+        ),
+        (
+            f"<resolution>PT60M</resolution>{GOOD_INTERVAL}<Point><position>1</position></Point>",
+            "price.amount",
+        ),
+        # present but wrong
+        (
+            f"<resolution>PT60M</resolution>{GOOD_INTERVAL}<Point><position>x</position><price.amount>1</price.amount></Point>",
+            "malformed number",
+        ),
+        (
+            f"<resolution>PT60M</resolution>{GOOD_INTERVAL}<Point><position>1</position><price.amount>cheap</price.amount></Point>",
+            "malformed number",
+        ),
+        (
+            "<resolution>PT60M</resolution><timeInterval><start>soon</start><end>later</end></timeInterval>"
+            + GOOD_POINT,
+            "malformed time",
+        ),
+        (f"<resolution>PT0M</resolution>{GOOD_INTERVAL}{GOOD_POINT}", "invalid|unsupported"),
+        (
+            "<resolution>PT60M</resolution><timeInterval><start>2026-10-30T23:00Z</start><end>2026-10-30T22:00Z</end></timeInterval>"
+            + GOOD_POINT,
+            "invalid time interval",
+        ),
+        (
+            "<resolution>PT60M</resolution><timeInterval><start>2000-01-01T00:00Z</start><end>2026-01-01T00:00Z</end></timeInterval>"
+            + GOOD_POINT,
+            "too long",
+        ),
+    ],
+)
+def test_malformed_responses_raise_a_clean_error_never_a_crash(body, expected):
+    with pytest.raises(EntsoeError) as err:
+        parse_day_ahead_xml(doc(body), "DE_LU")
+    assert any(part in str(err.value) for part in expected.split("|")), str(err.value)
+
+
+def test_a_valid_minimal_response_still_parses():
+    series = parse_day_ahead_xml(
+        doc(f"<resolution>PT60M</resolution>{GOOD_INTERVAL}{GOOD_POINT}"), "DE_LU"
+    )
+    assert [p.eur_per_mwh for p in series.points] == [10.0]
+
+
+def test_a_document_with_no_period_at_all_is_an_error():
+    with pytest.raises(EntsoeError):
+        parse_day_ahead_xml(
+            f"<Publication_MarketDocument {NS}></Publication_MarketDocument>", "DE_LU"
+        )

@@ -64,10 +64,12 @@ def build_user_message(question: str, facts: PriceFacts, correction: str = "") -
 
 
 def _total_cost(completions: list[Completion]) -> float | None:
-    costs = [c.cost_usd for c in completions]
-    if any(c is None for c in costs):
-        return None
-    return sum(costs)
+    total = 0.0
+    for completion in completions:
+        if completion.cost_usd is None:
+            return None
+        total += completion.cost_usd
+    return total
 
 
 def _combine(completions: list[Completion]) -> Completion:
