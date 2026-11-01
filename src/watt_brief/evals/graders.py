@@ -11,5 +11,10 @@ def forbidden_failures(text: str, forbidden: tuple[str, ...]) -> list[str]:
 
 
 def missing_failures(text: str, must_contain: tuple[str, ...]) -> list[str]:
+    """Each expected item must appear. Write "a|b" when either is a correct answer."""
     lowered = text.lower()
-    return [f"missing expected text: {m}" for m in must_contain if m.lower() not in lowered]
+    return [
+        f"missing expected text: {m}"
+        for m in must_contain
+        if not any(option.lower() in lowered for option in m.split("|"))
+    ]

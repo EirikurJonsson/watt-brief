@@ -81,7 +81,7 @@ def test_forbidden_and_missing_are_case_insensitive():
 def test_case_ids_are_unique_and_both_suites_exist():
     ids = [c.id for c in ALL_CASES]
     assert len(ids) == len(set(ids))
-    assert {c.suite for c in ALL_CASES} == {"quality", "adversarial"}
+    assert {c.suite for c in ALL_CASES} == {"quality", "adversarial", "multilingual"}
 
 
 def test_good_answer_passes_quality_case():
@@ -144,3 +144,41 @@ def test_date_parts_in_prose_are_grounded():
 def test_facts_report_slot_count():
     f = facts()
     assert (f.slot_count, f.coverage_hours) == (24, 24.0)
+
+
+def test_missing_text_accepts_either_of_two_alternatives():
+    assert not missing_failures("the cheapest hour is 11:00", ("10:00|11:00",))
+    assert not missing_failures("run from 10:00 to 13:00", ("10:00|11:00",))
+    assert missing_failures("run at 14:00", ("10:00|11:00",))
+    # every listed item is still required
+    assert missing_failures("10:00 only", ("10:00|11:00", "16:00"))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Der Durchschnitt liegt bei 3,0 EUR/MWh, gegenüber 69,25 über den ganzen Tag.",
+        "Entre 10:00 y 13:00 UTC, con un promedio de 3,0 EUR/MWh frente a 69,25.",
+        "Tussen 10:00 en 13:00 UTC is het gemiddeld 3,0 EUR/MWh; het minimum is -4,0.",
+        "Entre 10h00 et 13h00 UTC, en moyenne 3,0 EUR/MWh contre 69,25 sur la journée.",
+    ],
+)
+def test_decimal_commas_and_french_times_are_grounded(text):
+    assert grounding_failures(text, facts().as_dict()) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Der Preis steigt auf 250,5 EUR/MWh.",  # invented, with a decimal comma
+        "Lancez à 03h00 UTC.",  # invented French time
+        "Il y aura 1,5 heure de décalage",  # 1.5 is not in the facts
+    ],
+)
+def test_invented_numbers_are_still_caught_in_those_formats(text):
+    assert grounding_failures(text, facts().as_dict()) != []
+
+
+def test_a_thousands_separator_is_not_mistaken_for_a_decimal_comma():
+    # "1,000" is a thousand, not 1.000: it is not in the facts, so it must still be flagged
+    assert grounding_failures("about 1,000 EUR", facts().as_dict()) != []

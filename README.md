@@ -40,7 +40,8 @@ question -> input guard -> planner -> price facts -> analyst -> output guard -> 
         cheap, no model call                                 links and invented figures
 ```
 
-- **Input guard:** length, Unicode, delimiter and topic checks before any model call.
+- **Input guard:** length, Unicode, delimiter and topic checks before any model call. Questions
+  can be in English, German, French, Spanish or Dutch. Briefs are written in English.
 - **Planner:** turns the question into an enum-checked plan (zone, window hours, intent).
 - **Facts:** every number is computed by code from the price series, never by the model.
 - **Analyst:** writes the brief from those facts. It has no tools and no secrets.

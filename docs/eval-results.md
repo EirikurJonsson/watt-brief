@@ -102,3 +102,34 @@ injection attempt and a question about an unsupported country.
   data. The pipeline returns an honest "no data" error for the others.
 
 Next to test: a harder quality set, so the critic has something to improve.
+
+## Languages, and a planner that guessed (1 November)
+
+The six markets speak German, French, Spanish and Dutch, and the topic check only knew English.
+I wrote 24 ordinary energy questions (six per language) and measured.
+
+| Step | Result |
+|---|---|
+| Input guard on the 24 questions, before the fix | **3 of 24** got through. The rest were rejected as "off topic". |
+| After adding word stems per language, with accent folding | 24 of 24 get through. 8 off-topic and injection phrases in the same languages are still rejected. |
+| Live, full pipeline, first run (3 repeats) | 31 of 48. Most failures were the planner guessing a country from the language, so the French question became `FR`, which has no data yet. |
+| After a stricter planner prompt and a code check (the zone must be named in the question) | 70 of 72 |
+| After fixing a false positive in the grounding check (below) | **72 of 72** |
+
+Two things this found that the English evals could not:
+
+- **The planner guessed the country from the language.** The prompt change brought the planner
+  eval to 74 of 75, and the one miss was still a French question guessed as `FR`. So the rule is
+  now enforced in code: the zone the planner returns must be named in the question (a country,
+  a capital, a demonym or a code, in any of the four languages), or it becomes "unspecified".
+- **The grounding check rejected correct answers written with decimal commas.** `69,25` was read
+  as two invented numbers, 69 and 25, and French `10h00` as an invented 0. Every German, Spanish,
+  Dutch or French reader would have hit this. Decimal commas and French times are now normalised
+  first. Invented numbers in those formats are still caught, and `1,000` is still not mistaken
+  for a decimal.
+
+Rerun on the production configuration after these changes: quality 25 of 25, adversarial 75 of
+75, planner 74 of 75 (the miss is an intent label that nothing downstream uses).
+
+Not changed: briefs are still written in English whatever language the question is in. That is a
+product choice, not a defect, and it is listed as an open decision.

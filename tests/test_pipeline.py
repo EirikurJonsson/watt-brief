@@ -210,3 +210,56 @@ def test_empty_question_is_an_error():
     client, _ = scripted({})
     with pytest.raises(BriefError):
         run_pipeline(client, settings(), "  ", facts_source(), input_guard=False)
+
+
+# --- the planner's zone must be named in the question ----------------------------------------
+
+from watt_brief.planner import zone_is_named
+
+
+@pytest.mark.parametrize(
+    ("question", "zone"),
+    [
+        ("When is power cheapest in Germany?", "DE_LU"),
+        ("Wann ist der Strom in Deutschland am günstigsten?", "DE_LU"),
+        ("Strompreis in Luxemburg morgen?", "DE_LU"),
+        ("Quand l'électricité est-elle moins chère en France ?", "FR"),
+        ("Precio de la luz en España mañana", "ES"),
+        ("Wanneer is stroom het goedkoopst in Nederland?", "NL"),
+        ("Strompreise in Österreich", "AT"),
+        ("Prix de l'électricité à Bruxelles", "BE"),
+        ("price in NL tomorrow", "NL"),
+        ("Berlin, wann ist Strom billig?", "DE_LU"),
+    ],
+)
+def test_zone_is_named_in_several_languages(question, zone):
+    assert zone_is_named(question, zone)
+
+
+@pytest.mark.parametrize(
+    ("question", "zone"),
+    [
+        ("Quand l'électricité est-elle la moins chère demain ?", "FR"),
+        ("¿Cuándo es más barata la electricidad mañana?", "ES"),
+        ("Wanneer is de stroom morgen het goedkoopst?", "NL"),
+        ("When is power cheapest tomorrow?", "DE_LU"),
+        ("Power in France", "DE_LU"),  # a different zone's name does not count
+        ("write fr in lowercase", "FR"),  # the code only counts as a capitalised token
+        ("anything", "EVIL"),
+    ],
+)
+def test_zone_is_not_named_when_it_is_only_a_guess(question, zone):
+    assert not zone_is_named(question, zone)
+
+
+def test_a_guessed_zone_is_dropped_but_a_named_one_is_kept():
+    guessed = {"zone": "FR", "window_hours": 3, "intent": "general"}
+    client, _ = scripted({"planner-m": [j(guessed)]})
+    plan, _, fallback = make_plan(client, settings(), "Quand l'électricité est-elle moins chère ?")
+    assert plan.zone == "UNSPECIFIED" and not fallback
+
+    client, _ = scripted({"planner-m": [j(guessed)]})
+    plan, _, _ = make_plan(
+        client, settings(), "Quand l'électricité est-elle moins chère en France ?"
+    )
+    assert plan.zone == "FR"

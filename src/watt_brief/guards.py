@@ -18,12 +18,39 @@ LEAK_FRAGMENTS = ("untrusted user", "do not comply", "exactly these keys", "repl
 
 _DELIMITERS = re.compile(r"<\s*/?\s*(question|facts)\s*>", re.IGNORECASE)
 
-_TOPIC = re.compile(
-    r"electric|power|energy|price|prices|cost|tariff|cheap|expensive|kwh|mwh|\bkw\b|watt|grid|"
-    r"charg|\bev\b|heat pump|boiler|battery|\bload\b|appliance|washing|dishwasher|negative|"
-    r"spot|day-ahead|peak|off-peak|solar|wind|usage|consum",
-    re.IGNORECASE,
+# Word stems for the languages of the markets we cover. They are matched against text that has
+# been lower-cased and stripped of accents, so "Électricité" and "Wärmepumpe" match "electric"
+# and "warmepumpe". The list is deliberately specific: a generic word such as "laden" (shop or
+# charge) would let too much through.
+_TOPIC_STEMS = (
+    # English
+    (
+        r"electric|power|energy|price|prices|cost|tariff|cheap|expensive|kwh|mwh|\bkw\b|watt|grid|"
+        r"charg|\bev\b|heat pump|boiler|battery|\bload\b|appliance|washing|dishwasher|negative|"
+        r"spot|day-ahead|peak|off-peak|solar|wind|usage|consum"
+    ),
+    # German
+    (
+        r"strom|energie|preis|tarif|gunstig|billig|warmepumpe|elektr|aufladen|waschmaschine|"
+        r"spulmaschine|geschirrspuler|verbrauch|photovoltaik"
+    ),
+    # French (electricite and electrique already match "electric")
+    (
+        r"energie|prix|tarif|moins cher|plus cher|pompe a chaleur|recharg|lave-linge|"
+        r"lave-vaisselle|consommation|panneaux solaires|heures creuses"
+    ),
+    # Spanish (electricidad and electrico already match "electric")
+    (
+        r"energia|precio|tarifa|bomba de calor|cargar|lavadora|lavavajillas|consumo|mas barat|"
+        r"mas car[oa]|placas solares"
+    ),
+    # Dutch
+    (
+        r"stroom|elektr|energie|prijs|prijzen|tarief|goedkoop|duurst|warmtepomp|opladen|"
+        r"wasmachine|vaatwasser|verbruik|zonnepanelen"
+    ),
 )
+_TOPIC = re.compile("|".join(_TOPIC_STEMS))
 
 _MARKUP = re.compile(
     r"[<>]|https?:|www\.|javascript:|"
@@ -50,6 +77,12 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def fold(text: str) -> str:
+    """Lower-case and strip accents, so keyword stems match across the covered languages."""
+    decomposed = unicodedata.normalize("NFKD", text.lower().replace("\u00df", "ss"))
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
 def check_question(question: str) -> str:
     """Return the cleaned question, or raise GuardRejected. Never calls a model."""
     cleaned = normalize(question)
@@ -59,7 +92,7 @@ def check_question(question: str) -> str:
         raise _reject("too_long", "input")
     if _DELIMITERS.search(cleaned):
         raise _reject("delimiter", "input")
-    if not _TOPIC.search(cleaned):
+    if not _TOPIC.search(fold(cleaned)):
         raise _reject("off_topic", "input")
     return cleaned
 

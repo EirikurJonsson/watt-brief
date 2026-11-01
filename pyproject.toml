@@ -20,6 +20,9 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.6",
 ]
+injection = [
+    "pyarrow>=26.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

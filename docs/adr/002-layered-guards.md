@@ -49,6 +49,15 @@ reason and the question length, not the question.
 - Each layer can be switched off in the evals, so the contribution of each is measurable.
   See `docs/eval-results.md`.
 
+## Update, 1 November: languages
+
+The topic check now carries word stems for English, German, French, Spanish and Dutch, matched
+on lower-cased, accent-free text. Before that, 3 of 24 ordinary non-English questions got
+through. The stems are deliberately specific (no generic words such as "laden"), and tests check
+that off-topic and injection phrases in those languages are still rejected. Other languages are
+still treated as off topic. The grounding check also accepts decimal commas and French times, so
+correct non-English answers are not rejected. See `docs/eval-results.md`.
+
 ## What would change this
 
 If real traffic shows many legitimate questions rejected by the topic check, replace it

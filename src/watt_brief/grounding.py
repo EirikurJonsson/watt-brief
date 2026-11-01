@@ -10,6 +10,14 @@ _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _DATE_PARTS = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _TIME = re.compile(r"(?<!\d)(\d{1,2}):(\d{2})(?!\d)")
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+# German, Spanish, Dutch and French write decimals with a comma ("69,25"), and French writes
+# times as "10h00". Without this, a correct answer reads as two invented numbers.
+_DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d{1,2}(?!\d))")
+_FRENCH_TIME = re.compile(r"\b(\d{1,2})\s?h\s?(\d{2})\b")
+
+
+def _normalise(text: str) -> str:
+    return _FRENCH_TIME.sub(r"\1:\2", _DECIMAL_COMMA.sub(".", text))
 
 
 def _walk(value):
@@ -40,6 +48,7 @@ def _allowed(facts: dict) -> tuple[set[float], set[str]]:
 
 def grounding_failures(text: str, facts: dict) -> list[str]:
     numbers, times = _allowed(facts)
+    text = _normalise(text)
     failures = []
     for h, m in _TIME.findall(text):
         stamp = f"{int(h):02d}:{m}"
