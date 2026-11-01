@@ -3,6 +3,7 @@
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -20,16 +21,30 @@ MARKET_TZ = ZoneInfo("Europe/Brussels")
 CACHE_SECONDS = 3600
 
 
-def fixture_facts_source() -> FactsSource:
-    """Facts from the synthetic DE_LU fixture. Any other zone honestly has no data."""
-    series = parse_day_ahead_xml(FIXTURE.read_text(), "DE_LU")
+SeriesSource = Callable[[str], PriceSeries]
 
+
+def facts_from(series_source: SeriesSource) -> FactsSource:
     def get(zone: str, window_hours: int) -> PriceFacts:
-        if zone != "DE_LU":
-            raise NoDataError("I don't have price data for that zone yet.")
-        return analyse(series, window_hours=window_hours)
+        return analyse(series_source(zone), window_hours=window_hours)
 
     return get
+
+
+def fixture_series_source() -> SeriesSource:
+    """The synthetic DE_LU fixture. Any other zone honestly has no data."""
+    series = parse_day_ahead_xml(FIXTURE.read_text(), "DE_LU")
+
+    def get(zone: str) -> PriceSeries:
+        if zone != "DE_LU":
+            raise NoDataError("I don't have price data for that zone yet.")
+        return series
+
+    return get
+
+
+def fixture_facts_source() -> FactsSource:
+    return facts_from(fixture_series_source())
 
 
 def _delivery_days(now: datetime) -> list[tuple[datetime, datetime]]:
@@ -43,13 +58,13 @@ def _delivery_days(now: datetime) -> list[tuple[datetime, datetime]]:
     return days
 
 
-def entsoe_facts_source(settings: Settings, client: EntsoeClient | None = None) -> FactsSource:
+def entsoe_series_source(settings: Settings, client: EntsoeClient | None = None) -> SeriesSource:
     """Real prices, cached per zone so user traffic cannot hammer ENTSO-E."""
     entsoe = client or EntsoeClient(settings)
     cache: dict[str, tuple[float, PriceSeries]] = {}
     lock = threading.Lock()
 
-    def series_for(zone: str) -> PriceSeries:
+    def get(zone: str) -> PriceSeries:
         with lock:
             hit = cache.get(zone)
             if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
@@ -67,13 +82,18 @@ def entsoe_facts_source(settings: Settings, client: EntsoeClient | None = None) 
         log(logger, "entsoe_unavailable", zone=zone)
         raise NoDataError("Price data is not available right now.") from last_error
 
-    def get(zone: str, window_hours: int) -> PriceFacts:
-        return analyse(series_for(zone), window_hours=window_hours)
-
     return get
 
 
-def build_facts_source(settings: Settings) -> FactsSource:
+def entsoe_facts_source(settings: Settings, client: EntsoeClient | None = None) -> FactsSource:
+    return facts_from(entsoe_series_source(settings, client))
+
+
+def build_series_source(settings: Settings) -> SeriesSource:
     if settings.facts_source == "entsoe":
-        return entsoe_facts_source(settings)
-    return fixture_facts_source()
+        return entsoe_series_source(settings)
+    return fixture_series_source()
+
+
+def build_facts_source(settings: Settings) -> FactsSource:
+    return facts_from(build_series_source(settings))

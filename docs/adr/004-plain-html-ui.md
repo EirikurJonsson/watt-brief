@@ -39,6 +39,11 @@ is written to the page with `textContent`, never as HTML.
 - If the UI grows past one page, or needs shared state, that is the point to adopt a
   framework with a proper build. The JSON API does not change.
 
+## Design
+
+The visual design, the rules behind the chart and the checks that back them are in
+[design.md](../design.md).
+
 ## What would change this
 
 More than a couple of views, state shared between them, or a team that is more productive in

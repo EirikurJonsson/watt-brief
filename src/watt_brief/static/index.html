@@ -3,53 +3,98 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>watt-brief</title>
-  <meta name="description" content="Ask about European day-ahead electricity prices. Get a one-page brief that ends in a decision.">
+  <meta name="color-scheme" content="light dark">
+  <title>watt-brief: when is power cheap?</title>
+  <meta name="description" content="Day-ahead electricity prices for six European markets, with a plain answer on when to run your heat pump, charger or washing machine.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <header class="site">
+  <header class="wrap top">
     <a class="brand" href="/">watt-brief</a>
-    <span class="tag">Energy decisions, not energy dashboards.</span>
+    <a class="top-link" href="https://github.com/EirikurJonsson/watt-brief">Source and evals</a>
   </header>
 
-  <main>
-    <div id="data-banner" class="banner" role="note" hidden></div>
-
-    <form id="ask" novalidate>
-      <label for="question">Your question</label>
-      <textarea id="question" name="question" rows="3" maxlength="500" required
-        placeholder="When should my heat pump run tomorrow in Germany?"></textarea>
-      <div class="row">
-        <span id="count" class="muted">0 / 500</span>
-        <button type="submit" id="submit">Get brief</button>
+  <main class="wrap">
+    <section class="hero" aria-labelledby="answer">
+      <p id="context" class="context">Loading prices.</p>
+      <div class="hero-head">
+        <h1 id="answer" class="answer">Checking today's prices.</h1>
+        <p id="detail" class="detail"></p>
       </div>
-      <div class="examples">
-        <span class="muted">Try:</span>
-        <button type="button" class="chip">I need 3 hours of power tomorrow in Germany. When should I run my heat pump?</button>
-        <button type="button" class="chip">When is electricity most expensive tomorrow?</button>
-        <button type="button" class="chip">Are there negative prices tomorrow, and when?</button>
-      </div>
-    </form>
 
-    <p id="error" class="error" role="alert" hidden></p>
+      <figure class="chart" id="chart" hidden>
+        <figcaption id="chart-title" class="chart-title">Day-ahead price in EUR per MWh, by hour in UTC</figcaption>
 
-    <section id="result" class="card" tabindex="-1" aria-live="polite" hidden>
-      <h2>Recommendation</h2>
-      <p id="rec" class="rec"></p>
-      <h3>Why</h3>
-      <p id="reason"></p>
-      <h3>Caveats</h3>
-      <ul id="caveats"></ul>
-      <p id="meta" class="meta muted"></p>
+        <div class="plot" id="plot" tabindex="0" role="group"
+             aria-label="Price chart. Use the left and right arrow keys to read each hour.">
+          <div class="brackets" id="brackets"></div>
+          <div class="yaxis" id="yaxis" aria-hidden="true"></div>
+          <div class="area" id="area" aria-hidden="true"></div>
+          <div class="xaxis" id="xaxis" aria-hidden="true"></div>
+        </div>
+
+        <div class="table-wrap" id="table-wrap" tabindex="0" hidden>
+          <table class="data" id="data-table">
+            <caption>Day-ahead prices in EUR per MWh</caption>
+            <thead>
+              <tr><th scope="col">Time (UTC)</th><th scope="col" id="local-col">Your time</th><th scope="col">Price</th><th scope="col">Note</th></tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="chart-foot">
+          <ul class="key">
+            <li><span class="swatch swatch-cheap"></span><span id="key-cheap">Cheapest 3 hours</span></li>
+            <li><span class="swatch swatch-pricey"></span><span id="key-pricey">Priciest 3 hours</span></li>
+          </ul>
+          <button type="button" class="link" id="view-toggle">Show as table</button>
+        </div>
+        <p class="sr-only" id="live" aria-live="polite"></p>
+      </figure>
+    </section>
+
+    <section class="ask" aria-labelledby="ask-title">
+      <h2 id="ask-title">Ask about your own situation</h2>
+      <p class="ask-lead">Tell us what you need to run and for how long. You get a short brief that ends in a decision.</p>
+
+      <form id="ask" novalidate>
+        <label class="sr-only" for="question">Your question</label>
+        <textarea id="question" name="question" rows="2" maxlength="500" required
+          placeholder="I need 3 hours for my heat pump tomorrow. When should it run?"></textarea>
+        <div class="actions">
+          <button type="submit" class="primary" id="submit">Get my brief</button>
+          <span id="count" class="count">0 of 500</span>
+        </div>
+        <p class="try">
+          Or try:
+          <button type="button" class="link chip" data-q="I need 3 hours of power tomorrow in Germany. When should I run my heat pump?">heat pump, 3 hours</button>
+          <button type="button" class="link chip" data-q="When is electricity most expensive tomorrow, so I can avoid it?">the expensive hours</button>
+          <button type="button" class="link chip" data-q="Are there negative prices tomorrow, and when?">negative prices</button>
+        </p>
+      </form>
+
+      <p id="error" class="error" role="alert" hidden></p>
+
+      <article id="result" class="result" tabindex="-1" aria-live="polite" hidden>
+        <h3 id="rec" class="rec"></h3>
+        <h4>Why</h4>
+        <p id="reason"></p>
+        <h4>Caveats</h4>
+        <ul id="caveats"></ul>
+        <p id="meta" class="meta"></p>
+      </article>
     </section>
   </main>
 
-  <footer>
-    <p>Day-ahead prices, EUR per MWh, times in UTC. Guidance only, not financial advice.</p>
-    <p><a href="https://github.com/EirikurJonsson/watt-brief">Source, decisions and eval results</a></p>
+  <footer class="wrap">
+    <div class="foot">
+      <p>Prices are day-ahead, in EUR per MWh. Times are UTC unless a time zone is named. Guidance only, not financial advice.</p>
+      <p><a href="https://github.com/EirikurJonsson/watt-brief">How it works, the decisions behind it, and the eval results</a></p>
+    </div>
   </footer>
 </body>
 </html>

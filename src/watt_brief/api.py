@@ -21,14 +21,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from watt_brief.alerts import AlertManager
+from watt_brief.chart import chart_payload
 from watt_brief.config import Settings
+from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
 from watt_brief.limits import AbuseTracker, KillSwitch, RateLimiter, SpendTracker
 from watt_brief.llm import Completion, LLMClient, LLMError
 from watt_brief.logging import log, new_request_id
 from watt_brief.metrics import Metrics
 from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
-from watt_brief.sources import build_facts_source
+from watt_brief.sources import SeriesSource, build_series_source, facts_from
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,7 @@ def create_app(
     settings: Settings,
     *,
     get_facts: FactsSource | None = None,
+    get_series: SeriesSource | None = None,
     llm_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     metrics = Metrics()
@@ -76,7 +79,10 @@ def create_app(
     abuse = AbuseTracker()
     alerts = AlertManager(settings.alert_webhook_url)
     slots = threading.BoundedSemaphore(settings.max_concurrent_requests)
-    facts_source = get_facts or build_facts_source(settings)
+    series_source = get_series or build_series_source(settings)
+    facts_source = get_facts or facts_from(series_source)
+    price_limiter = RateLimiter(60, 2000)
+    data_source = "synthetic" if settings.facts_source == "fixture" else "entsoe"
     metrics.spend_cap.set(settings.daily_spend_cap_usd)
 
     def on_completion(step: str, completion: Completion) -> None:
@@ -105,7 +111,7 @@ def create_app(
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
-            response.headers[name] = value
+            response.headers.setdefault(name, value)
         return response
 
     def client_key(request: Request) -> str:
@@ -206,10 +212,34 @@ def create_app(
             "caveats": result.brief.caveats,
             "zone": result.facts.zone,
             "window_hours": result.facts.window_hours,
-            "data_source": "synthetic" if settings.facts_source == "fixture" else "entsoe",
+            "data_source": data_source,
             "request_id": request_id,
         }
+        try:
+            body["chart"] = chart_payload(
+                series_source(result.facts.zone), result.facts.window_hours, data_source
+            )
+        except (NoDataError, ValueError):
+            pass  # the brief is still useful without the chart
         return finish("ok", 200, body, started)
+
+    @app.get("/api/prices")
+    async def prices(request: Request, zone: str = "DE_LU", hours: int = 3):
+        """The day's price curve and its cheapest and priciest windows. No model call."""
+        allowed, retry_after = price_limiter.check(client_key(request))
+        if not allowed:
+            return JSONResponse(
+                {"error": MESSAGES["rate_limited"]},
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
+        if zone not in ZONES or not 1 <= hours <= 6:
+            return JSONResponse({"error": "Unknown zone or window."}, status_code=422)
+        try:
+            payload = chart_payload(series_source(zone), hours, data_source)
+        except (NoDataError, ValueError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        return JSONResponse(payload, headers={"Cache-Control": "public, max-age=300"})
 
     @app.get("/healthz")
     async def healthz():

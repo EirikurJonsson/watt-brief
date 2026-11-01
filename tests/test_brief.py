@@ -159,3 +159,9 @@ def test_output_guard_can_be_switched_off_for_measurement():
     client, calls = llm_sequence([UNGROUNDED])
     brief, _ = write_brief(client, settings(), Q, facts(), output_guard=False)
     assert "45" in brief.reasoning and len(calls) == 1
+
+
+def test_prompt_asks_for_readable_times_not_iso_timestamps():
+    from watt_brief.brief import SYSTEM_PROMPT
+
+    assert "HH:MM" in SYSTEM_PROMPT and "Never write ISO timestamps" in SYSTEM_PROMPT

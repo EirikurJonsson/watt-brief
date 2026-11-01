@@ -12,11 +12,14 @@ recommended decision, with the reasoning and the cost of producing it.
 API token. Progress and open items: [docs/status.md](docs/status.md). Every response says
 which data it used.
 
-| Dark, with a real brief | Phone, light |
-|---|---|
-| ![Result card in dark mode](docs/images/ui_3_result_dark.png) | ![Result on a phone](docs/images/ui_4_result_phone_light.png) |
+![The page opens on the day's prices, with the cheapest and priciest windows marked](docs/images/hero-light.png)
 
-*Screenshots show real model output on the synthetic fixture.*
+| On a phone | A real brief, dark mode |
+|---|---|
+| ![The same page on a phone](docs/images/hero-phone.png) | ![A brief written by the model](docs/images/result-dark.png) |
+
+*Synthetic demo data. The brief is real model output. How the page was designed and why:
+[docs/design.md](docs/design.md).*
 
 ## Why this exists
 
@@ -42,6 +45,10 @@ question -> input guard -> planner -> price facts -> analyst -> output guard -> 
 - **Output guard:** rejects a brief that leaks the prompt, echoes attacker text, contains
   markup or links, or contains a figure that is not in the facts.
 - **Critic:** built and measured, off by default. See [ADR 003](docs/adr/003-planner-yes-critic-not-yet.md).
+
+The page opens on the day's price chart, drawn from code with no model call, so it is useful
+before anyone types a word. Asking a question adds a brief and moves the chart to the window
+the brief talks about.
 
 Each layer is measured on its own in [docs/eval-results.md](docs/eval-results.md), including
 what it got wrong.

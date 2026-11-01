@@ -289,3 +289,68 @@ def test_blank_metrics_token_does_not_open_metrics(tmp_path):
     with make_client(tmp_path, metrics_token="") as client:
         assert client.get("/metrics").status_code == 404
         assert client.get("/metrics", headers={"authorization": "Bearer "}).status_code == 404
+
+
+def test_prices_endpoint_returns_the_curve_and_both_windows(tmp_path):
+    with make_client(tmp_path) as client:
+        r = client.get("/api/prices")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["zone"] == "DE_LU" and data["data_source"] == "synthetic"
+    assert len(data["points"]) == 24 and data["points"][0] == ["2026-10-30T22:00Z", 62.0]
+    assert data["cheapest_window"] == {
+        "start": "2026-10-31T10:00Z",
+        "end": "2026-10-31T13:00Z",
+        "avg": 3.0,
+    }
+    assert data["priciest_window"]["avg"] == 139.0
+    assert data["mean"] == 69.25
+    assert r.headers["cache-control"] == "public, max-age=300"
+
+
+def test_prices_window_hours_changes_the_windows(tmp_path):
+    with make_client(tmp_path) as client:
+        data = client.get("/api/prices?hours=2").json()
+    assert data["window_hours"] == 2
+    assert data["cheapest_window"]["start"] == "2026-10-31T11:00Z"
+
+
+@pytest.mark.parametrize("query", ["zone=EVIL", "zone=DE_LU%26x=1", "hours=0", "hours=99"])
+def test_prices_rejects_bad_parameters(tmp_path, query):
+    with make_client(tmp_path) as client:
+        assert client.get(f"/api/prices?{query}").status_code == 422
+
+
+def test_prices_zone_without_data_is_404(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.get("/api/prices?zone=FR").status_code == 404
+
+
+def test_prices_does_not_use_up_the_brief_rate_limit(tmp_path):
+    with make_client(tmp_path, rate_limit_per_minute=1) as client:
+        for _ in range(5):
+            assert client.get("/api/prices").status_code == 200
+        assert client.post("/api/brief", json=Q).status_code == 200
+
+
+def test_prices_endpoint_is_rate_limited_on_its_own(tmp_path):
+    with make_client(tmp_path) as client:
+        statuses = [client.get("/api/prices").status_code for _ in range(62)]
+    assert statuses[:60] == [200] * 60 and 429 in statuses[60:]
+
+
+def test_brief_response_carries_the_chart_for_the_planned_window(tmp_path):
+    with make_client(tmp_path) as client:
+        body = client.post("/api/brief", json=Q).json()
+    assert body["chart"]["zone"] == "DE_LU"
+    assert body["chart"]["window_hours"] == body["window_hours"] == 3
+    assert len(body["chart"]["points"]) == 24
+
+
+def test_font_is_served_from_our_own_origin(tmp_path):
+    with make_client(tmp_path) as client:
+        r = client.get("/static/fonts/bricolage-grotesque-latin-opsz-normal.woff2")
+        licence = client.get("/static/fonts/OFL.txt")
+    assert r.status_code == 200 and len(r.content) > 10_000
+    assert r.headers["content-type"].startswith("font/woff2")
+    assert licence.status_code == 200 and "SIL Open Font License" in licence.text

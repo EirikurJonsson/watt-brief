@@ -11,6 +11,8 @@ code() { curl -s -o /dev/null -w '%{http_code}' --max-time 90 "$@"; }
 
 check "healthz"                200 "$(code "$base/healthz")"
 check "index page"             200 "$(code "$base/")"
+check "price chart data"       200 "$(code "$base/api/prices")"
+check "font served locally"    200 "$(code "$base/static/fonts/bricolage-grotesque-latin-opsz-normal.woff2")"
 check "docs hidden"            404 "$(code "$base/docs")"
 check "metrics hidden"         404 "$(code "$base/metrics")"
 check "non-JSON rejected"      415 "$(code -X POST -H 'Content-Type: text/plain' -d '{"question":"power price?"}' "$base/api/brief")"
