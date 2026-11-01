@@ -109,4 +109,5 @@ Architecture decisions are in [docs/adr/](docs/adr/). The threat model is in
 
 ## Licence
 
-TBD.
+[MIT](LICENSE). The two public datasets used by the held-out injection eval are fetched at run
+time under their own licences and are not part of this repository.

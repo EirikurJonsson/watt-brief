@@ -20,6 +20,16 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 12. [x] UI: plain HTML page with strict CSP, redesigned around the price chart (ADR 004, docs/design.md), checked in a real browser (scripts/ui_check.mjs)
 13. [ ] Deploy on the home server behind Cloudflare Tunnel. Repo side done and checked as far as possible without Docker (Dockerfile, compose fragment, CI/CD, smoke script, runbook in docs/deploy.md). Needs from Eirikur: GitHub secrets, server env file and compose merge over SSH, Cloudflare hostname route. First real image build happens in CI.
 14. [ ] Write up cost, latency, attacks seen, and what broke
+15. [ ] Alerts to ntfy (decided 1 Nov, not built). Today alerts only write to the log, so nobody sees them.
+    - `alerts.py` posts JSON `{"text": ...}` to `ALERT_WEBHOOK_URL`. ntfy wants a plain-text body with
+      optional `Title`, `Priority` and `Tags` headers, so add an `ALERT_WEBHOOK_FORMAT=ntfy` option
+      (critical alerts at high priority, warnings at default).
+    - On ntfy.sh the topic name is the only secret, so use a long random topic and treat the URL
+      like a key, or self-host ntfy on the home server and put it behind auth.
+    - Also add an external uptime check (the in-process alerts cannot fire if the service is down).
+    - Test: unit test for the request shape, then trigger a real alert with the kill switch.
+16. [ ] Product decision: should briefs be written in the language of the question? Today the
+    question can be in five languages and the brief is always English.
 
 ## What broke
 
