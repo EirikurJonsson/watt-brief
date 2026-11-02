@@ -33,12 +33,12 @@ services:
     # No published ports on purpose.
     expose:
       - "8000"
-    # Secrets live here, on the server only: LLM_API_KEY, LLM_BASE_URL, MODEL_*, METRICS_TOKEN.
+    # Secrets live here, on the server only: LLM_API_KEY, LLM_BASE_URL, MODEL_*, METRICS_TOKEN, ENTSOE_API_TOKEN.
     env_file:
       - ./watt-brief.env
     environment:
       TRUST_CF_CONNECTING_IP: "true"
-      FACTS_SOURCE: fixture
+      FACTS_SOURCE: entsoe
       SPEND_DB_PATH: /app/data/spend.sqlite
       KILL_SWITCH_FILE: /app/data/KILL_SWITCH
     volumes:

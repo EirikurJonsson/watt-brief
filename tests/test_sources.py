@@ -1,3 +1,4 @@
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from watt_brief.config import Settings
 from watt_brief.entsoe import EntsoeClient
 from watt_brief.pipeline import NoDataError
 from watt_brief.sources import (
+    CACHE_SECONDS,
+    STALE_SECONDS,
     _delivery_days,
     entsoe_series_source,
     fixture_facts_source,
@@ -106,3 +109,50 @@ def test_chart_payload_shows_the_fetch_time_for_real_data_only():
     payload = chart_payload(real, 3, "entsoe")
     assert payload["fetched_at"] == real.fetched_at.strftime("%Y-%m-%dT%H:%MZ")
     assert chart_payload(fixture_series_source()("DE_LU"), 3, "synthetic")["fetched_at"] is None
+
+
+def test_concurrent_requests_on_a_cold_cache_make_one_fetch():
+    calls = []
+    gate = threading.Event()
+
+    def handler(req):
+        calls.append(1)
+        gate.wait(2)
+        return httpx.Response(200, text=XML)
+
+    source = entsoe_source(handler)
+    threads = [threading.Thread(target=source, args=("DE_LU",)) for _ in range(5)]
+    for t in threads:
+        t.start()
+    gate.set()
+    for t in threads:
+        t.join()
+    assert len(calls) == 1
+
+
+def test_an_expired_entry_is_served_when_the_refresh_fails(monkeypatch):
+    from watt_brief import sources
+
+    ok = [True]
+
+    def handler(req):
+        return httpx.Response(200, text=XML if ok[0] else NO_DATA)
+
+    clock = [1000.0]
+    monkeypatch.setattr(sources.time, "monotonic", lambda: clock[0])
+    source = entsoe_source(handler)
+    first = source("DE_LU")
+    ok[0] = False
+    clock[0] += CACHE_SECONDS + 1
+    assert source("DE_LU") is first
+    clock[0] += STALE_SECONDS
+    with pytest.raises(NoDataError):
+        source("DE_LU")
+
+
+def test_unknown_zone_has_no_data_without_touching_the_network():
+    def handler(req):
+        raise AssertionError("no request expected")
+
+    with pytest.raises(NoDataError):
+        entsoe_source(handler)("XX")
