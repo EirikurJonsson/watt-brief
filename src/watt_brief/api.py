@@ -11,6 +11,7 @@ import logging
 import threading
 import time
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 
 import httpx
@@ -25,12 +26,13 @@ from watt_brief.chart import chart_payload
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
+from watt_brief.history import PriceHistory
 from watt_brief.limits import AbuseTracker, KillSwitch, RateLimiter, SpendTracker
 from watt_brief.llm import Completion, LLMClient, LLMError
 from watt_brief.logging import log, new_request_id
 from watt_brief.metrics import Metrics
 from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
-from watt_brief.sources import SeriesSource, build_series_source, facts_from
+from watt_brief.sources import SeriesSource, build_history, build_series_source, facts_from
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,7 @@ def create_app(
     *,
     get_facts: FactsSource | None = None,
     get_series: SeriesSource | None = None,
+    history: PriceHistory | None = None,
     llm_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     metrics = Metrics()
@@ -79,11 +82,23 @@ def create_app(
     abuse = AbuseTracker()
     alerts = AlertManager(settings.alert_webhook_url, settings.alert_webhook_format)
     slots = threading.BoundedSemaphore(settings.max_concurrent_requests)
-    series_source = get_series or build_series_source(settings)
+    if history is None and get_series is None:
+        history = build_history(settings)
+    series_source = get_series or build_series_source(settings, history)
     facts_source = get_facts or facts_from(series_source)
     price_limiter = RateLimiter(60, 2000)
     data_source = "synthetic" if settings.facts_source == "fixture" else "entsoe"
     metrics.spend_cap.set(settings.daily_spend_cap_usd)
+
+    def stale_zones() -> list[str]:
+        report = getattr(series_source, "serving_stale", None)
+        return report() if report else []
+
+    def previous_day(series):
+        if history is None or not series.points:
+            return None
+        first = series.points[0].start
+        return history.load(series.zone, first - timedelta(days=1), first)
 
     def on_completion(step: str, completion: Completion) -> None:
         cost = completion.cost_usd
@@ -107,6 +122,8 @@ def create_app(
         yield
         llm.close()
         spend.close()
+        if history is not None:
+            history.close()
 
     app = FastAPI(
         title="watt-brief", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
@@ -136,7 +153,9 @@ def create_app(
         today = spend.today()
         metrics.spend_today.set(today)
         metrics.bans.set(abuse.banned_count)
-        alerts.check(today, settings.daily_spend_cap_usd, kill.active(), abuse.banned_count)
+        alerts.check(
+            today, settings.daily_spend_cap_usd, kill.active(), abuse.banned_count, stale_zones()
+        )
         log(logger, "request", outcome=outcome, status=status, latency_ms=int(elapsed * 1000))
         headers = {"Retry-After": str(retry_after)} if retry_after else None
         return JSONResponse(body, status_code=status, headers=headers)
@@ -221,8 +240,9 @@ def create_app(
             "request_id": request_id,
         }
         try:
+            series = series_source(result.facts.zone)
             body["chart"] = chart_payload(
-                series_source(result.facts.zone), result.facts.window_hours, data_source
+                series, result.facts.window_hours, data_source, previous_day(series)
             )
         except (NoDataError, ValueError):
             pass  # the brief is still useful without the chart
@@ -241,7 +261,8 @@ def create_app(
         if zone not in ZONES or not 1 <= hours <= 6:
             return JSONResponse({"error": "Unknown zone or window."}, status_code=422)
         try:
-            payload = chart_payload(series_source(zone), hours, data_source)
+            series = series_source(zone)
+            payload = chart_payload(series, hours, data_source, previous_day(series))
         except (NoDataError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=404)
         return JSONResponse(payload, headers={"Cache-Control": "public, max-age=300"})
@@ -251,11 +272,16 @@ def create_app(
         cap = settings.daily_spend_cap_usd
         used = spend.today() / cap if cap > 0 else 1.0
         killed = kill.active()
-        status = "degraded" if killed or used >= 1.0 else "ok"
+        stale = stale_zones()
+        status = "degraded" if killed or used >= 1.0 or stale else "ok"
+        age_report = getattr(series_source, "oldest_fetch_age_seconds", None)
+        age = age_report() if age_report else None
         return {
             "status": status,
             "spend_used_pct": round(min(used, 9.99) * 100),
             "data_source": "synthetic" if settings.facts_source == "fixture" else "entsoe",
+            "stale_zones": stale,
+            "oldest_fetch_age_minutes": None if age is None else round(age / 60),
         }
 
     @app.get("/metrics")

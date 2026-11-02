@@ -374,3 +374,75 @@ def test_page_has_link_preview_tags_and_the_image_exists(tmp_path):
         assert tag in html
     assert image.status_code == 200 and image.headers["content-type"] == "image/png"
     assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+class StaleSource:
+    """A series source that reports it is serving old data."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def __call__(self, zone):
+        return self.inner(zone)
+
+    def serving_stale(self):
+        return ["DE_LU"]
+
+    def oldest_fetch_age_seconds(self):
+        return 5400.0
+
+
+def test_healthz_degrades_and_reports_age_when_serving_old_prices(tmp_path):
+    from watt_brief.sources import fixture_series_source
+
+    app = create_app(
+        make_settings(tmp_path),
+        get_series=StaleSource(fixture_series_source()),
+        llm_transport=httpx.MockTransport(llm_handler()),
+    )
+    with TestClient(app) as client:
+        body = client.get("/healthz").json()
+    assert body["status"] == "degraded"
+    assert body["stale_zones"] == ["DE_LU"] and body["oldest_fetch_age_minutes"] == 90
+
+
+def test_healthz_is_ok_with_no_stale_data(tmp_path):
+    with make_client(tmp_path) as client:
+        body = client.get("/healthz").json()
+    assert body["status"] == "ok" and body["stale_zones"] == []
+
+
+def test_prices_include_the_comparison_with_the_previous_day(tmp_path):
+    from datetime import timedelta
+
+    from watt_brief.history import PriceHistory
+    from watt_brief.sources import fixture_series_source
+
+    today = fixture_series_source()("DE_LU")
+    first = today.points[0].start
+    history = PriceHistory(":memory:")
+    cheaper = [p.eur_per_mwh * 2 for p in today.points]  # yesterday cost double
+    from watt_brief.entsoe import PricePoint, PriceSeries
+
+    history.save(
+        PriceSeries(
+            "DE_LU",
+            today.resolution_minutes,
+            [PricePoint(p.start - timedelta(days=1), v) for p, v in zip(today.points, cheaper)],
+        ),
+        fetched_at=first,
+    )
+    app = create_app(
+        make_settings(tmp_path),
+        get_series=fixture_series_source(),
+        history=history,
+        llm_transport=httpx.MockTransport(llm_handler()),
+    )
+    with TestClient(app) as client:
+        body = client.get("/api/prices").json()
+    assert body["previous_day"]["change_pct"] == -50
+
+
+def test_prices_have_no_comparison_without_history(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.get("/api/prices").json()["previous_day"] is None

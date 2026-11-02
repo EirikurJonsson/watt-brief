@@ -8,7 +8,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 1. [x] Repo skeleton, config, ADR 001
 2. [x] Threat model written, and reviewed against the built system on 1 Nov. Still open there: things outside the repository (provider spend limit, Cloudflare rule, branch protection)
 3. [x] Structured logging and request IDs from the first line of app code
-4. [x] ENTSO-E client built and tested on synthetic fixtures; swap in real recordings once the token works
+4. [x] ENTSO-E client built and tested; live on 2 Nov. Real recordings added as fixtures (`live_*`). Live check found two parser bugs (several TimeSeries per response; intraday series in ES), both fixed. Open: confirm what ENTSO-E's "sequence 2" is; we use sequence 1, which matches ES's coupled price
 5. [x] One agent answers one question end to end (on synthetic fixture data)
 6. [x] Eval harness: quality and adversarial evals with code graders, live results in docs/eval-results.md; CI runs lint and offline tests (live evals stay manual because they spend money)
 7. [x] Input and output guards, layered and measured separately (ADR 002). Open: held-out attack set, non-English questions
@@ -28,6 +28,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
       like a key, or self-host ntfy on the home server and put it behind auth.
     - Also add an external uptime check (the in-process alerts cannot fire if the service is down).
     - Test: unit test for the request shape, then trigger a real alert with the kill switch.
+15b. [x] Price history (2 Nov): SQLite `prices` table, written on every fetch, backs the stale fallback after a restart, backfill script, "compared with the day before" on the chart. Data freshness in `/healthz` plus a `stale_data` alert. Daily live contract check in CI (needs the `ENTSOE_API_TOKEN` repository secret). See docs/operations.md. Open: no feature reads history beyond the day-before figure; the brief itself does not yet use it (the grounding guards would need to learn the new numbers)
 16. [ ] Product decision: should briefs be written in the language of the question? Today the
     question can be in five languages and the brief is always English.
 

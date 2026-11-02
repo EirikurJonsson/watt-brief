@@ -224,7 +224,14 @@
         ? "Synthetic demo data, not market prices."
         : "Day-ahead prices from ENTSO-E" +
           (c.fetched_at ? ", fetched " + utcHM(new Date(c.fetched_at)) + " UTC." : ".");
-    $("context").textContent = upperFirst(c.zone_name) + ", " + dayText + ". " + source;
+    let versus = "";
+    const prev = c.previous_day;
+    if (prev && prev.change_pct !== null && Math.abs(prev.change_pct) >= 1) {
+      versus =
+        " On average " + Math.abs(prev.change_pct) + "% " +
+        (prev.change_pct < 0 ? "cheaper" : "dearer") + " than the day before.";
+    }
+    $("context").textContent = upperFirst(c.zone_name) + ", " + dayText + ". " + source + versus;
 
     const from = new Date(c.cheapest_window.start);
     const to = new Date(c.cheapest_window.end);

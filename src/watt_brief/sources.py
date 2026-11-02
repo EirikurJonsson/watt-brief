@@ -1,6 +1,7 @@
 """Where price facts come from: synthetic fixture for demos, ENTSO-E for the real thing."""
 
 import logging
+import sqlite3
 import threading
 import time
 from collections.abc import Callable
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 from watt_brief.analysis import PriceFacts, analyse
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES, EntsoeClient, EntsoeError, PriceSeries, parse_day_ahead_xml
+from watt_brief.history import PriceHistory
 from watt_brief.logging import log
 from watt_brief.pipeline import FactsSource, NoDataError
 
@@ -62,62 +64,117 @@ def _delivery_days(now: datetime) -> list[tuple[datetime, datetime]]:
     return days
 
 
-def entsoe_series_source(settings: Settings, client: EntsoeClient | None = None) -> SeriesSource:
+class EntsoeSeriesSource:
     """Real prices, cached per zone so user traffic cannot hammer ENTSO-E.
 
     One fetch per zone at a time: concurrent requests on a cold or expired entry wait for the
-    first and reuse its result. If a refresh fails, an entry younger than STALE_SECONDS is served.
+    first and reuse its result. If a refresh fails, an entry younger than STALE_SECONDS is served,
+    from memory or, after a restart, from the history table. Every fetch is written to history.
     """
-    entsoe = client or EntsoeClient(settings)
-    cache: dict[str, tuple[float, PriceSeries]] = {}
-    lock = threading.Lock()
-    zone_locks = {zone: threading.Lock() for zone in ZONES}
 
-    def cached(zone: str, max_age: float) -> PriceSeries | None:
-        with lock:
-            hit = cache.get(zone)
+    def __init__(
+        self,
+        settings: Settings,
+        client: EntsoeClient | None = None,
+        history: PriceHistory | None = None,
+    ):
+        self._entsoe = client or EntsoeClient(settings)
+        self._history = history
+        self._cache: dict[str, tuple[float, PriceSeries]] = {}
+        self._lock = threading.Lock()
+        self._zone_locks = {zone: threading.Lock() for zone in ZONES}
+        self._serving_stale: set[str] = set()
+
+    def _cached(self, zone: str, max_age: float) -> PriceSeries | None:
+        with self._lock:
+            hit = self._cache.get(zone)
         if hit and time.monotonic() - hit[0] < max_age:
             return hit[1]
         return None
 
-    def get(zone: str) -> PriceSeries:
-        fresh = cached(zone, CACHE_SECONDS)
+    def _from_history(self, zone: str) -> PriceSeries | None:
+        if self._history is None:
+            return None
+        for start, end in _delivery_days(datetime.now(UTC)):
+            series = self._history.load(zone, start, end)
+            if series and series.fetched_at:
+                age = (datetime.now(UTC) - series.fetched_at).total_seconds()
+                if age < STALE_SECONDS:
+                    return series
+        return None
+
+    def __call__(self, zone: str) -> PriceSeries:
+        fresh = self._cached(zone, CACHE_SECONDS)
         if fresh:
             return fresh
-        if zone not in zone_locks:
+        if zone not in self._zone_locks:
             raise NoDataError("I don't have price data for that zone yet.")
-        with zone_locks[zone]:
-            fresh = cached(zone, CACHE_SECONDS)  # another request may have refreshed it
+        with self._zone_locks[zone]:
+            fresh = self._cached(zone, CACHE_SECONDS)  # another request may have refreshed it
             if fresh:
                 return fresh
             last_error: EntsoeError | None = None
             for start, end in _delivery_days(datetime.now(UTC)):
                 try:
-                    series = entsoe.day_ahead_prices(zone, start, end)
+                    series = self._entsoe.day_ahead_prices(zone, start, end)
                 except EntsoeError as exc:
                     last_error = exc
                     continue
                 series = replace(series, fetched_at=datetime.now(UTC))
-                with lock:
-                    cache[zone] = (time.monotonic(), series)
+                with self._lock:
+                    self._cache[zone] = (time.monotonic(), series)
+                    self._serving_stale.discard(zone)
+                self._record(series)
                 return series
-            stale = cached(zone, STALE_SECONDS)
+            stale = self._cached(zone, STALE_SECONDS) or self._from_history(zone)
             if stale:
+                with self._lock:
+                    self._serving_stale.add(zone)
                 log(logger, "entsoe_stale", zone=zone)
                 return stale
             log(logger, "entsoe_unavailable", zone=zone)
             raise NoDataError("Price data is not available right now.") from last_error
 
-    return get
+    def _record(self, series: PriceSeries) -> None:
+        if self._history is None:
+            return
+        try:
+            self._history.save(series)
+        except sqlite3.Error as exc:  # history is a bonus: never fail a request over it
+            log(logger, "history_write_failed", zone=series.zone, kind=type(exc).__name__)
+
+    def serving_stale(self) -> list[str]:
+        """Zones whose last refresh failed and are being answered from old data."""
+        with self._lock:
+            return sorted(self._serving_stale)
+
+    def oldest_fetch_age_seconds(self) -> float | None:
+        """Age of the least recently fetched cached zone; None before the first fetch."""
+        with self._lock:
+            ages = [time.monotonic() - at for at, _ in self._cache.values()]
+        return max(ages) if ages else None
+
+
+def entsoe_series_source(
+    settings: Settings, client: EntsoeClient | None = None, history: PriceHistory | None = None
+) -> EntsoeSeriesSource:
+    return EntsoeSeriesSource(settings, client, history)
 
 
 def entsoe_facts_source(settings: Settings, client: EntsoeClient | None = None) -> FactsSource:
     return facts_from(entsoe_series_source(settings, client))
 
 
-def build_series_source(settings: Settings) -> SeriesSource:
+def build_history(settings: Settings) -> PriceHistory | None:
+    """Only real prices are worth keeping: the synthetic day must never reach the table."""
+    if settings.facts_source != "entsoe":
+        return None
+    return PriceHistory(settings.history_db_path)
+
+
+def build_series_source(settings: Settings, history: PriceHistory | None = None) -> SeriesSource:
     if settings.facts_source == "entsoe":
-        return entsoe_series_source(settings)
+        return entsoe_series_source(settings, history=history)
     return fixture_series_source()
 
 

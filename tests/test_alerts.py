@@ -111,3 +111,10 @@ def test_a_network_failure_in_the_notifier_is_swallowed(monkeypatch):
 
     monkeypatch.setattr(httpx, "post", boom)
     AlertManager._post_webhook("https://ntfy.example/secret-topic", CRITICAL, "ntfy")
+
+
+def test_serving_old_prices_raises_a_warning_naming_the_zones():
+    alerts = evaluate(0.0, 1.0, OK, False, 0, stale_zones=["DE_LU", "FR"])
+    assert [(a.name, a.severity) for a in alerts] == [("stale_data", "warning")]
+    assert "DE_LU, FR" in alerts[0].message
+    assert evaluate(0.0, 1.0, OK, False, 0) == []

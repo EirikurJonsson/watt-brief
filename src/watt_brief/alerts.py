@@ -1,6 +1,7 @@
 """Alert rules. Pure evaluation plus a small manager that de-duplicates and notifies.
 
-Rules fire on spend nearing the cap, an error spike, an abuse pattern, and the kill switch.
+Rules fire on spend nearing the cap, an error spike, an abuse pattern, the kill switch, and
+prices being served from old data.
 Notification is a structured log line, plus an optional webhook if one is configured. The webhook
 body is `{"text": ...}` JSON by default, or a plain-text ntfy message (`webhook_format="ntfy"`).
 """
@@ -8,7 +9,7 @@ body is `{"text": ...}` JSON by default, or a plain-text ntfy message (`webhook_
 import logging
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import httpx
@@ -53,8 +54,17 @@ def evaluate(
     outcomes: list[str],
     kill_active: bool,
     banned_keys: int,
+    stale_zones: Sequence[str] = (),
 ) -> list[Alert]:
     alerts = []
+    if stale_zones:
+        alerts.append(
+            Alert(
+                "stale_data",
+                "warning",
+                f"ENTSO-E refresh failed; serving old prices for {', '.join(stale_zones)}.",
+            )
+        )
     if kill_active:
         alerts.append(Alert("kill_switch", "critical", "Kill switch is active; serving nothing."))
     if cap > 0:
@@ -102,12 +112,19 @@ class AlertManager:
         self.outcomes.append(outcome)
 
     def check(
-        self, spend_today: float, cap: float, kill_active: bool, banned_keys: int
+        self,
+        spend_today: float,
+        cap: float,
+        kill_active: bool,
+        banned_keys: int,
+        stale_zones: Sequence[str] = (),
     ) -> list[Alert]:
         """Evaluate rules and notify each alert at most once per cooldown."""
         fired = []
         now = self._clock()
-        for alert in evaluate(spend_today, cap, list(self.outcomes), kill_active, banned_keys):
+        for alert in evaluate(
+            spend_today, cap, list(self.outcomes), kill_active, banned_keys, stale_zones
+        ):
             last = self._last_fired.get(alert.name)
             if last is not None and now - last < COOLDOWN_SECONDS:
                 continue

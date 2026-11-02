@@ -67,6 +67,27 @@ On ntfy.sh anyone who knows the topic name can read it and post to it. Use a lon
 Alerts contain counts and percentages, never question text. In-process alerts cannot fire when the
 service is down, so also point an external uptime check at `/healthz`.
 
+## Price data and history
+
+- **Cache.** Real prices are cached per zone for one hour, one fetch at a time per zone, so user
+  traffic cannot reach ENTSO-E more than about six times an hour.
+- **When ENTSO-E fails.** A refresh that fails serves the old prices for up to 12 hours (the chart
+  shows the fetch time). `/healthz` then reports `"status": "degraded"`, lists `stale_zones`, and a
+  `stale_data` warning goes to the alert webhook. `oldest_fetch_age_minutes` shows how old the
+  least recently fetched zone is. The container healthcheck still passes: stale prices are
+  degraded service, not a dead one.
+- **History.** Every fetch is upserted into `data/history.sqlite` (table `prices`: zone, UTC slot
+  start, EUR/MWh, resolution, fetch time), only when `FACTS_SOURCE=entsoe`. It survives restarts,
+  answers when ENTSO-E is down after a restart, and gives the "compared with the day before" line.
+  Back it up by copying the file (`sqlite3 history.sqlite ".backup copy.sqlite"` is safe while the
+  service runs). It holds about 96 rows per zone per day.
+- **Backfill** past days (idempotent): `docker compose exec watt_brief python -m watt_brief.backfill --days 30`
+- **Contract check.** `.github/workflows/contract-check.yml` runs `scripts/contract_check.py`
+  daily against the live API: one clean day per zone, no duplicate timestamps, plausible prices. It
+  needs the repository secret `ENTSOE_API_TOKEN` and skips itself without it.
+- **Fixtures.** `tests/fixtures/live_*` are recorded responses; re-record with
+  `scripts/record_fixture.py`.
+
 ## Model provider failures
 
 Transient failures (timeouts, connection errors, HTTP 408, 429 and 5xx) are retried up to

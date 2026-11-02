@@ -156,3 +156,102 @@ def test_unknown_zone_has_no_data_without_touching_the_network():
 
     with pytest.raises(NoDataError):
         entsoe_source(handler)("XX")
+
+
+def test_every_fetch_is_written_to_history():
+    from watt_brief.history import PriceHistory
+
+    history = PriceHistory(":memory:")
+    entsoe = EntsoeClient(
+        settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, text=XML))
+    )
+    first = entsoe_series_source(settings(), entsoe, history)("DE_LU")
+    assert history.count("DE_LU") == len(first.points)
+
+
+def test_after_a_restart_with_entsoe_down_the_history_table_answers():
+    from dataclasses import replace
+
+    from watt_brief.history import PriceHistory
+
+    history = PriceHistory(":memory:")
+    day_start = _delivery_days(datetime.now(UTC))[1][0]  # today's Brussels day
+    parsed = fixture_series_source()("DE_LU")
+    shifted = replace(
+        parsed,
+        points=[
+            replace(p, start=day_start + (p.start - parsed.points[0].start)) for p in parsed.points
+        ],
+    )
+    history.save(shifted, fetched_at=datetime.now(UTC))
+
+    down = EntsoeClient(
+        settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, text=NO_DATA))
+    )
+    restarted = entsoe_series_source(settings(), down, history)  # empty memory cache
+    served = restarted("DE_LU")
+    assert [p.eur_per_mwh for p in served.points] == [p.eur_per_mwh for p in shifted.points]
+    assert restarted.serving_stale() == ["DE_LU"]
+
+
+def test_history_older_than_the_stale_limit_is_not_served():
+    from datetime import timedelta
+
+    from watt_brief.history import PriceHistory
+
+    history = PriceHistory(":memory:")
+    day_start = _delivery_days(datetime.now(UTC))[1][0]
+    parsed = fixture_series_source()("DE_LU")
+    history.save(
+        parsed.__class__("DE_LU", 60, [parsed.points[0].__class__(day_start, 1.0)]),
+        fetched_at=datetime.now(UTC) - timedelta(seconds=STALE_SECONDS + 60),
+    )
+    down = EntsoeClient(
+        settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, text=NO_DATA))
+    )
+    with pytest.raises(NoDataError):
+        entsoe_series_source(settings(), down, history)("DE_LU")
+
+
+def test_no_history_and_no_data_is_an_error_not_an_invention():
+    source = entsoe_source(lambda req: httpx.Response(200, text=NO_DATA))
+    with pytest.raises(NoDataError):
+        source("DE_LU")
+    assert source.serving_stale() == []
+
+
+def test_a_good_refresh_clears_the_stale_flag(monkeypatch):
+    from watt_brief import sources
+
+    ok = [True]
+    clock = [1000.0]
+    monkeypatch.setattr(sources.time, "monotonic", lambda: clock[0])
+    source = entsoe_source(lambda req: httpx.Response(200, text=XML if ok[0] else NO_DATA))
+    assert source.oldest_fetch_age_seconds() is None
+    source("DE_LU")
+    ok[0] = False
+    clock[0] += CACHE_SECONDS + 1
+    source("DE_LU")
+    assert source.serving_stale() == ["DE_LU"]
+    assert source.oldest_fetch_age_seconds() == CACHE_SECONDS + 1
+    ok[0] = True
+    clock[0] += CACHE_SECONDS + 1
+    source("DE_LU")
+    assert source.serving_stale() == []
+
+
+def test_a_history_write_failure_never_fails_the_request():
+    import sqlite3
+
+    class Broken:
+        def save(self, series):
+            raise sqlite3.OperationalError("disk full")
+
+        def load(self, *args):
+            return None
+
+    client = EntsoeClient(
+        settings(), transport=httpx.MockTransport(lambda r: httpx.Response(200, text=XML))
+    )
+    series = entsoe_series_source(settings(), client, Broken())("DE_LU")  # type: ignore[arg-type]
+    assert len(series.points) == 24

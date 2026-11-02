@@ -218,3 +218,27 @@ def test_a_response_with_only_intraday_series_is_an_error():
     xml = f"<Publication_MarketDocument {NS}>{_series('A07', 1, 1.0)}</Publication_MarketDocument>"
     with pytest.raises(EntsoeError, match="no day-ahead series"):
         parse_day_ahead_xml(xml, "ES")
+
+
+def test_recorded_de_lu_response_with_two_sequences_gives_one_clean_day():
+    series = parse_day_ahead_xml(fixture("live_de_lu_2026-11-02.xml"), "DE_LU")
+    starts = [p.start for p in series.points]
+    assert len(starts) == len(set(starts)) == 96
+    assert series.resolution_minutes == 15
+    # sequence 1 of the daily auction; sequence 2 starts at 230.02
+    assert [p.eur_per_mwh for p in series.points[:2]] == [250.96, 245.99]
+    assert series.points[4].eur_per_mwh == 243.94  # 00:00 UTC, as ENTSO-E's site shows it
+    assert (
+        min(p.eur_per_mwh for p in series.points),
+        max(p.eur_per_mwh for p in series.points),
+    ) == (
+        202.98,
+        340.96,
+    )
+
+
+def test_recorded_es_response_ignores_the_intraday_auctions():
+    series = parse_day_ahead_xml(fixture("live_es_2026-11-02.xml"), "ES")
+    assert len(series.points) == 96
+    # the intraday auctions in the same response go down to -17.93
+    assert min(p.eur_per_mwh for p in series.points) == 0.84

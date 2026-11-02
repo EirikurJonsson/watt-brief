@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Counted per call when the provider reports no cost, so the cap is never blind.
     fallback_cost_per_call_usd: float = 0.001
     spend_db_path: str = "data/spend.sqlite"
+    history_db_path: str = "data/history.sqlite"
     kill_switch_file: str = "KILL_SWITCH"
     rate_limit_per_minute: int = 6
     rate_limit_per_day: int = 100
