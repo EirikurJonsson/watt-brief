@@ -184,3 +184,37 @@ def test_a_document_with_no_period_at_all_is_an_error():
         parse_day_ahead_xml(
             f"<Publication_MarketDocument {NS}></Publication_MarketDocument>", "DE_LU"
         )
+
+
+def _series(agreement: str, position: int | None, price: float) -> str:
+    seq = (
+        f"<classificationSequence_AttributeInstanceComponent.position>{position}"
+        "</classificationSequence_AttributeInstanceComponent.position>"
+        if position
+        else ""
+    )
+    return (
+        f"<TimeSeries><contract_MarketAgreement.type>{agreement}</contract_MarketAgreement.type>"
+        f"{seq}<Period><resolution>PT60M</resolution>{GOOD_INTERVAL}"
+        f"<Point><position>1</position><price.amount>{price}</price.amount></Point>"
+        "</Period></TimeSeries>"
+    )
+
+
+def test_only_the_first_daily_series_is_used_when_the_response_has_several():
+    # Shape seen live for DE_LU and ES: two daily sequences plus intraday auctions.
+    xml = (
+        f"<Publication_MarketDocument {NS}>"
+        + _series("A07", 1, 1.0)
+        + _series("A01", 2, 2.0)
+        + _series("A01", 1, 3.0)
+        + "</Publication_MarketDocument>"
+    )
+    series = parse_day_ahead_xml(xml, "DE_LU")
+    assert [p.eur_per_mwh for p in series.points] == [3.0]
+
+
+def test_a_response_with_only_intraday_series_is_an_error():
+    xml = f"<Publication_MarketDocument {NS}>{_series('A07', 1, 1.0)}</Publication_MarketDocument>"
+    with pytest.raises(EntsoeError, match="no day-ahead series"):
+        parse_day_ahead_xml(xml, "ES")

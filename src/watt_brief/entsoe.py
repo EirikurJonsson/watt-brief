@@ -82,6 +82,39 @@ def _parse_time(text: str) -> datetime:
 MAX_SLOTS = 400
 
 
+def _optional_text(node, name: str) -> str | None:
+    found = _find(node, name)
+    return found.text.strip() if found is not None and found.text else None
+
+
+def _day_ahead_series(root):
+    """The one TimeSeries that is the day-ahead price.
+
+    A live response can carry several for the same interval: intraday auctions
+    (contract_MarketAgreement.type A07) and further sequences of the daily auction. Merging
+    them would double the points and mix prices, so keep only the daily (A01) series with the
+    lowest sequence position. A series with no position counts as the first.
+    """
+    series = [n for n in root if _local(n.tag) == "TimeSeries"]
+    if not series:
+        return [root]
+    daily = [
+        ts for ts in series if _optional_text(ts, "contract_MarketAgreement.type") in (None, "A01")
+    ]
+    if not daily:
+        raise EntsoeError("no day-ahead series in response")
+
+    def position(ts) -> int:
+        text = _optional_text(ts, "classificationSequence_AttributeInstanceComponent.position")
+        return int(text) if text and text.isdigit() else 0
+
+    return [min(daily, key=position)]
+
+
+def _periods(series_nodes):
+    return (n for ts in series_nodes for n in ts.iter() if _local(n.tag) == "Period")
+
+
 def parse_day_ahead_xml(xml: str, zone: str) -> PriceSeries:
     try:
         root = ElementTree.fromstring(xml)
@@ -94,7 +127,7 @@ def parse_day_ahead_xml(xml: str, zone: str) -> PriceSeries:
 
     points: list[PricePoint] = []
     resolution: int | None = None
-    for period in (n for n in root.iter() if _local(n.tag) == "Period"):
+    for period in _periods(_day_ahead_series(root)):
         match = _RESOLUTION.match(_text(period, "resolution"))
         if not match:
             raise EntsoeError("unsupported resolution")
