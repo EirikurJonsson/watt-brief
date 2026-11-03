@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from watt_brief.analysis import analyse
 from watt_brief.entsoe import PriceSeries
+from watt_brief.units import EUR_PER_MWH, Display
 
 MARKET_TZ = ZoneInfo("Europe/Brussels")
 
@@ -16,12 +17,24 @@ ZONE_NAMES = {
     "ES": "Spain",
 }
 
+# Short labels for the country selector.
+ZONE_LABELS = {
+    "DE_LU": "Germany/Luxembourg",
+    "FR": "France",
+    "NL": "Netherlands",
+    "BE": "Belgium",
+    "AT": "Austria",
+    "ES": "Spain",
+}
+
 
 def _iso(dt) -> str:
     return dt.strftime("%Y-%m-%dT%H:%MZ")
 
 
-def compare_with_previous(series: PriceSeries, previous: PriceSeries | None) -> dict | None:
+def compare_with_previous(
+    series: PriceSeries, previous: PriceSeries | None, display: Display = EUR_PER_MWH
+) -> dict | None:
     """Mean price against the previous day's. None unless that day is nearly complete and has the
     same slot length, so a half-recorded day never produces a misleading percentage."""
     if previous is None or previous.resolution_minutes != series.resolution_minutes:
@@ -33,7 +46,7 @@ def compare_with_previous(series: PriceSeries, previous: PriceSeries | None) -> 
     change = None if abs(before) < 1.0 else round((mean - before) / abs(before) * 100)
     return {
         "date": previous.points[0].start.astimezone(MARKET_TZ).strftime("%Y-%m-%d"),
-        "mean": round(before, 2),
+        "mean": display.convert(before),
         "change_pct": change,
     }
 
@@ -43,6 +56,7 @@ def chart_payload(
     window_hours: int,
     data_source: str,
     previous: PriceSeries | None = None,
+    display: Display = EUR_PER_MWH,
 ) -> dict:
     """Series plus the two highlighted windows, computed by the same code the brief uses."""
     facts = analyse(series, window_hours=window_hours)
@@ -54,18 +68,28 @@ def chart_payload(
         "fetched_at": _iso(series.fetched_at) if series.fetched_at else None,
         "resolution_minutes": series.resolution_minutes,
         "window_hours": window_hours,
-        "mean": facts.mean_eur_per_mwh,
-        "previous_day": compare_with_previous(series, previous),
+        # What the prices below are in. Converted from EUR/MWh by Display, nowhere else.
+        "unit": display.unit,
+        "currency": display.currency,
+        "price_label": display.label,
+        "fx": (
+            {"rate": display.rate, "date": display.rate_date, "source": "frankfurter.app"}
+            if display.rate_date
+            else None
+        ),
+        "currency_fallback": display.fallback,
+        "mean": display.convert(facts.mean_eur_per_mwh),
+        "previous_day": compare_with_previous(series, previous, display),
         "cheapest_window": {
             "start": facts.cheapest_window.start_utc,
             "end": facts.cheapest_window.end_utc,
-            "avg": facts.cheapest_window.avg_eur_per_mwh,
+            "avg": display.convert(facts.cheapest_window.avg_eur_per_mwh),
         },
         "priciest_window": {
             "start": facts.priciest_window.start_utc,
             "end": facts.priciest_window.end_utc,
-            "avg": facts.priciest_window.avg_eur_per_mwh,
+            "avg": display.convert(facts.priciest_window.avg_eur_per_mwh),
         },
         # compact [time, price] pairs: the chart redraws from these
-        "points": [[_iso(p.start), p.eur_per_mwh] for p in series.points],
+        "points": [[_iso(p.start), display.convert(p.eur_per_mwh)] for p in series.points],
     }

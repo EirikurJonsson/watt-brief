@@ -29,6 +29,28 @@
 
   <main class="wrap">
     <section class="hero" aria-labelledby="answer">
+      <div class="controls">
+        <div class="field combo">
+          <label for="zone-input">Country</label>
+          <input id="zone-input" type="text" role="combobox" autocomplete="off" spellcheck="false"
+                 aria-autocomplete="list" aria-expanded="false" aria-controls="zone-list"
+                 placeholder="Type to filter" disabled>
+          <ul id="zone-list" class="combo-list" role="listbox" aria-label="Countries" hidden></ul>
+        </div>
+        <fieldset class="field seg">
+          <legend>Unit</legend>
+          <label><input type="radio" name="unit" value="MWh" checked> MWh</label></label>
+          <label><input type="radio" name="unit" value="kWh"> kWh</label>
+        </fieldset>
+        <fieldset class="field seg">
+          <legend>Currency</legend>
+          <label><input type="radio" name="currency" value="EUR" checked> EUR</label>
+          <label><input type="radio" name="currency" value="DKK"> DKK</label>
+        </fieldset>
+      </div>
+      <p class="fx-note">Clear the country field to let your question choose the country.</p>
+      <p id="fx-note" class="fx-note" aria-live="polite"></p>
+
       <p id="context" class="context">Loading prices.</p>
       <div class="hero-head">
         <h1 id="answer" class="answer">Checking today's prices.</h1>
@@ -48,9 +70,9 @@
 
         <div class="table-wrap" id="table-wrap" tabindex="0" hidden>
           <table class="data" id="data-table">
-            <caption>Day-ahead prices in EUR per MWh</caption>
+            <caption id="table-caption">Day-ahead prices in EUR per MWh</caption>
             <thead>
-              <tr><th scope="col">Time (UTC)</th><th scope="col" id="local-col">Your time</th><th scope="col">Price</th><th scope="col">Note</th></tr>
+              <tr><th scope="col">Time (UTC)</th><th scope="col" id="local-col">Your time</th><th scope="col" id="price-col">Price (EUR/MWh)</th><th scope="col">Note</th></tr>
             </thead>
             <tbody id="table-body"></tbody>
           </table>
@@ -102,7 +124,7 @@
 
   <footer class="wrap">
     <div class="foot">
-      <p>Prices are day-ahead, in EUR per MWh. Times are UTC unless a time zone is named. Guidance only, not financial advice.</p>
+      <p id="foot-note">Prices are day-ahead, in EUR per MWh. Times are UTC unless a time zone is named. Guidance only, not financial advice.</p>
       <p><a href="https://github.com/EirikurJonsson/watt-brief">How it works, the decisions behind it, and the eval results</a>. <a href="/privacy">Privacy</a>.</p>
     </div>
   </footer>

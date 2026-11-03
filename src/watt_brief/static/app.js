@@ -11,7 +11,13 @@
     minimumFractionDigits: 1,
     maximumFractionDigits: 2,
   });
-  const fmt = (value) => numberFormat.format(value).replace("-", MINUS);
+  // Per-kWh prices are small, so they need more decimals than per-MWh ones.
+  const kwhFormat = new Intl.NumberFormat("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+  let priceFormat = numberFormat;
+  const fmt = (value) => priceFormat.format(value).replace("-", MINUS);
   const pad = (n) => String(n).padStart(2, "0");
 
   const utcHM = (d) => pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
@@ -29,6 +35,17 @@
   };
   const upperFirst = (text) => text.charAt(0).toUpperCase() + text.slice(1);
   const hoursLabel = (n) => n + (n === 1 ? " hour" : " hours");
+  const perWords = (c) => c.price_label.replace("/", " per ");
+  // Which prices these are, and where any conversion came from. Shown on every render.
+  const priceBasis = (c) => {
+    if (c.fx) {
+      return (
+        perWords(c) + ", converted from EUR per MWh at 1 EUR = " + c.fx.rate + " DKK (ECB rate of " +
+        c.fx.date + ", via " + c.fx.source + ")"
+      );
+    }
+    return perWords(c) + (c.unit === "kWh" ? ", converted from EUR per MWh (1 MWh = 1000 kWh)" : "");
+  };
 
   // ---------- state ----------
 
@@ -62,7 +79,9 @@
     // a little room under zero when prices go negative, without a whole empty tick band
     const lo = min < 0 ? min - 0.05 * (hi - min) : 0;
     const ticks = [];
-    for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) ticks.push(t);
+    for (let k = Math.ceil(lo / step); k * step <= hi + 1e-9; k++) {
+      ticks.push(Number((k * step).toPrecision(12)));
+    }
     return { lo, hi, ticks };
   }
 
@@ -72,6 +91,7 @@
 
   function derive(payload) {
     chart = payload;
+    priceFormat = payload.unit === "kWh" ? kwhFormat : numberFormat;
     pts = payload.points.map(([iso, price]) => ({ iso, t: new Date(iso), price }));
     scale = makeScale(pts.map((p) => p.price));
     const per = (payload.window_hours * 60) / payload.resolution_minutes;
@@ -204,6 +224,8 @@
     body.replaceChildren();
     const first = pts[0] ? pts[0].t : new Date();
     $("local-col").textContent = "Your time (" + zoneName(first) + ")";
+    $("price-col").textContent = "Price (" + chart.price_label + ")";
+    $("table-caption").textContent = "Day-ahead prices in " + perWords(chart);
     pts.forEach((p, i) => {
       const row = el("tr");
       row.appendChild(el("td", "", utcHM(p.t)));
@@ -243,7 +265,8 @@
       parts.push("That is " + localHM(from) + " to " + localHM(to) + " in " + zoneName(from) + ".");
     }
     parts.push(
-      "It averages " + fmt(c.cheapest_window.avg) + " EUR/MWh, against " + fmt(c.mean) + " over the whole day."
+      "It averages " + fmt(c.cheapest_window.avg) + " " + c.price_label + ", against " + fmt(c.mean) +
+        " over the whole day."
     );
     const pFrom = new Date(c.priciest_window.start);
     const pTo = new Date(c.priciest_window.end);
@@ -261,6 +284,19 @@
     );
   }
 
+  function renderBasis() {
+    const c = chart;
+    $("chart-title").textContent = "Day-ahead price in " + perWords(c) + ", by hour in UTC";
+    $("foot-note").textContent =
+      "Prices are day-ahead, in " + priceBasis(c) + ". Times are UTC unless a time zone is named. " +
+      "Guidance only, not financial advice.";
+    $("fx-note").textContent = c.currency_fallback
+      ? "The EUR/DKK rate could not be fetched, so prices are shown in EUR."
+      : c.fx
+        ? "1 EUR = " + c.fx.rate + " DKK, ECB rate of " + c.fx.date + ", via " + c.fx.source + "."
+        : "";
+  }
+
   function render(payload, animate) {
     derive(payload);
     $("chart").hidden = false; // visible first: bracket labels are measured during layout
@@ -274,7 +310,7 @@
     renderBrackets();
     renderTable();
     renderHero();
-
+    renderBasis();
     if (animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       area.classList.add("is-entering");
       setTimeout(() => area.classList.remove("is-entering"), 1800);
@@ -288,7 +324,7 @@
     const when = utcHM(p.t) + " UTC" + (sameAsUtc(p.t) ? "" : ", " + localHM(p.t) + " " + zoneName(p.t));
     const kind = windowOf(i);
     const note = kind === "cheap" ? "In the cheapest window" : kind === "pricey" ? "In the priciest window" : "";
-    return { value: fmt(p.price) + " EUR/MWh", when, note, kind };
+    return { value: fmt(p.price) + " " + chart.price_label, when, note, kind };
   }
 
   function setActive(i, announce) {
@@ -374,14 +410,138 @@
     }, 150);
   });
 
+  // ---------- choices: country, unit, currency ----------
+
+  const choice = { zone: null, unit: "MWh", currency: "EUR" };
+  let zones = []; // [{ code, label }] from /api/zones
+
+  const zoneInput = $("zone-input");
+  const zoneList = $("zone-list");
+  let options = []; // the zones currently listed
+  let highlighted = -1;
+
+  const zoneLabel = (code) => {
+    const found = zones.find((z) => z.code === code);
+    return found ? found.label : "";
+  };
+
+  function closeList() {
+    zoneList.hidden = true;
+    zoneInput.setAttribute("aria-expanded", "false");
+    zoneInput.removeAttribute("aria-activedescendant");
+    highlighted = -1;
+  }
+
+  function highlight(i) {
+    highlighted = i;
+    zoneList.querySelectorAll("li").forEach((li, n) => {
+      li.setAttribute("aria-selected", n === i ? "true" : "false");
+    });
+    if (i >= 0) {
+      zoneInput.setAttribute("aria-activedescendant", "zone-opt-" + i);
+      zoneList.children[i].scrollIntoView({ block: "nearest" });
+    } else {
+      zoneInput.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function openList(filter) {
+    const needle = filter.trim().toLowerCase();
+    options = zones.filter((z) => z.label.toLowerCase().includes(needle));
+    zoneList.replaceChildren();
+    options.forEach((z, i) => {
+      const li = el("li", "combo-option", z.label);
+      li.id = "zone-opt-" + i;
+      li.setAttribute("role", "option");
+      li.addEventListener("mousedown", (event) => {
+        event.preventDefault(); // keep focus in the input
+        pickZone(z.code);
+      });
+      zoneList.appendChild(li);
+    });
+    if (!options.length) zoneList.appendChild(el("li", "combo-empty", "No matching country"));
+    zoneList.hidden = false;
+    zoneInput.setAttribute("aria-expanded", "true");
+    highlight(options.length ? 0 : -1);
+  }
+
+  function pickZone(code) {
+    closeList();
+    zoneInput.value = zoneLabel(code);
+    if (code !== choice.zone) {
+      choice.zone = code;
+      loadPrices();
+    }
+  }
+
+  zoneInput.addEventListener("focus", () => {
+    zoneInput.select();
+    openList("");
+  });
+  zoneInput.addEventListener("click", () => {
+    if (zoneList.hidden) openList("");
+  });
+  zoneInput.addEventListener("input", () => openList(zoneInput.value));
+  zoneInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (zoneList.hidden) openList("");
+      else if (options.length) {
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        highlight((highlighted + step + options.length) % options.length);
+      }
+    } else if (event.key === "Enter" && !zoneList.hidden) {
+      event.preventDefault();
+      if (highlighted >= 0) pickZone(options[highlighted].code);
+    } else if (event.key === "Escape" && !zoneList.hidden) {
+      event.preventDefault();
+      zoneInput.value = zoneLabel(choice.zone);
+      closeList();
+    }
+  });
+  zoneInput.addEventListener("blur", () => {
+    closeList();
+    if (zoneInput.value.trim() === "" && choice.zone !== null) {
+      // an emptied field hands the choice back to the question
+      choice.zone = null;
+      loadPrices();
+    }
+    zoneInput.value = zoneLabel(choice.zone);
+  });
+
+  for (const radio of document.querySelectorAll('input[name="unit"], input[name="currency"]')) {
+    radio.addEventListener("change", () => {
+      choice[radio.name] = radio.value;
+      loadPrices();
+    });
+  }
+
+  async function loadZones() {
+    try {
+      const response = await fetch("/api/zones");
+      if (!response.ok) throw new Error("status " + response.status);
+      zones = await response.json();
+      zoneInput.disabled = false;
+    } catch (_) {
+      // the country field stays disabled; the page works without it
+    }
+  }
+
   // ---------- prices ----------
 
   async function loadPrices() {
+    const query = new URLSearchParams({
+      unit: choice.unit,
+      currency: choice.currency,
+      hours: String(chart ? chart.window_hours : 3),
+    });
+    if (choice.zone) query.set("zone", choice.zone);
     try {
-      const response = await fetch("/api/prices");
+      const response = await fetch("/api/prices?" + query);
       if (!response.ok) throw new Error("status " + response.status);
       render(await response.json(), true);
     } catch (_) {
+      $("chart").hidden = true;
       $("context").textContent = "";
       $("answer").textContent = "Prices are not available right now.";
       $("detail").textContent =
@@ -419,9 +579,17 @@
     for (const caveat of data.caveats) list.appendChild(el("li", "", caveat));
 
     const source = data.data_source === "synthetic" ? "synthetic demo data" : "ENTSO-E day-ahead prices";
+    const basis =
+      data.zone_source === "selector"
+        ? "the country you chose"
+        : data.zone_source === "question"
+          ? "the country named in your question"
+          : "the default country, as none was chosen or named";
+    const prices = data.chart ? "; the chart is in " + priceBasis(data.chart) : "";
     $("meta").textContent =
-      "Based on " + source + " for " + data.zone + ", a " + data.window_hours +
-      "-hour window, times in UTC. Reference " + data.request_id + ".";
+      "Based on " + source + " for " + data.zone + " (" + basis + "), a " + data.window_hours +
+      "-hour window, times in UTC. Figures in the written brief are in " + data.brief_unit + prices +
+      ". Reference " + data.request_id + ".";
 
     result.hidden = false;
     result.focus();
@@ -437,7 +605,12 @@
       const response = await fetch("/api/brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({
+          question,
+          unit: choice.unit,
+          currency: choice.currency,
+          ...(choice.zone ? { zone: choice.zone } : {}),
+        }),
         signal: controller.signal,
       });
       let body = null;
@@ -484,5 +657,6 @@
   }
 
   updateCount();
+  loadZones();
   loadPrices();
 })();

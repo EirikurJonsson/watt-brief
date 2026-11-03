@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from watt_brief.api import create_app
 from watt_brief.config import Settings
+from watt_brief.fx import FxRate
 from watt_brief.sources import fixture_facts_source
 
 GOOD = {
@@ -446,3 +447,102 @@ def test_prices_include_the_comparison_with_the_previous_day(tmp_path):
 def test_prices_have_no_comparison_without_history(tmp_path):
     with make_client(tmp_path) as client:
         assert client.get("/api/prices").json()["previous_day"] is None
+
+
+def rate_client(tmp_path, rate):
+    app = create_app(
+        make_settings(tmp_path),
+        get_facts=fixture_facts_source(),
+        get_rate=lambda: rate,
+        llm_transport=httpx.MockTransport(llm_handler()),
+    )
+    return TestClient(app)
+
+
+def test_zones_endpoint_lists_code_and_label_for_every_supported_zone(tmp_path):
+    with make_client(tmp_path) as client:
+        r = client.get("/api/zones")
+    assert r.status_code == 200
+    assert r.json() == [
+        {"code": "DE_LU", "label": "Germany/Luxembourg"},
+        {"code": "FR", "label": "France"},
+        {"code": "NL", "label": "Netherlands"},
+        {"code": "BE", "label": "Belgium"},
+        {"code": "AT", "label": "Austria"},
+        {"code": "ES", "label": "Spain"},
+    ]
+
+
+def test_prices_default_is_eur_per_mwh_with_no_fx(tmp_path):
+    with make_client(tmp_path) as client:
+        data = client.get("/api/prices").json()
+    assert data["price_label"] == "EUR/MWh" and data["fx"] is None
+    assert data["currency_fallback"] is False
+
+
+def test_prices_in_kwh_are_the_mwh_prices_divided_by_1000(tmp_path):
+    with make_client(tmp_path) as client:
+        data = client.get("/api/prices?unit=kWh").json()
+    assert data["price_label"] == "EUR/kWh"
+    assert data["points"][0] == ["2026-10-30T22:00Z", 0.062]
+    assert data["mean"] == 0.06925 and data["cheapest_window"]["avg"] == 0.003
+
+
+def test_prices_in_dkk_per_kwh_use_the_rate_and_report_it(tmp_path):
+    with rate_client(tmp_path, FxRate(7.5, "2026-11-02")) as client:
+        data = client.get("/api/prices?unit=kWh&currency=DKK").json()
+    assert data["price_label"] == "DKK/kWh"
+    assert data["points"][0][1] == 0.465
+    assert data["fx"] == {"rate": 7.5, "date": "2026-11-02", "source": "frankfurter.app"}
+
+
+def test_prices_fall_back_to_eur_when_the_rate_is_unavailable(tmp_path):
+    with rate_client(tmp_path, None) as client:
+        data = client.get("/api/prices?currency=DKK").json()
+    assert data["currency"] == "EUR" and data["currency_fallback"] is True
+    assert data["fx"] is None and data["points"][0][1] == 62.0
+
+
+@pytest.mark.parametrize("query", ["unit=GWh", "currency=USD"])
+def test_prices_reject_unknown_unit_or_currency(tmp_path, query):
+    with make_client(tmp_path) as client:
+        assert client.get(f"/api/prices?{query}").status_code == 422
+
+
+def test_brief_without_selector_reports_where_the_zone_came_from(tmp_path):
+    with make_client(tmp_path) as client:
+        body = client.post("/api/brief", json=Q).json()
+    assert body["zone_source"] == "question" and body["brief_unit"] == "EUR/MWh"
+
+
+def test_selected_zone_wins_over_the_question_and_is_explicit(tmp_path):
+    seen = []
+    real = fixture_facts_source()
+
+    def facts(zone, hours):
+        seen.append(zone)
+        return real("DE_LU", hours)
+
+    with make_client(tmp_path, facts=facts) as client:
+        body = client.post(
+            "/api/brief", json={"question": "Cheapest hours in France?", "zone": "AT"}
+        )
+    assert body.status_code == 200
+    assert seen == ["AT"]
+    assert body.json()["zone_source"] == "selector"
+
+
+def test_brief_chart_follows_unit_and_currency(tmp_path):
+    with rate_client(tmp_path, FxRate(7.5, "2026-11-02")) as client:
+        body = client.post("/api/brief", json={**Q, "unit": "kWh", "currency": "DKK"}).json()
+    assert body["chart"]["price_label"] == "DKK/kWh"
+    assert body["chart"]["fx"]["date"] == "2026-11-02"
+    assert body["brief_unit"] == "EUR/MWh"
+
+
+@pytest.mark.parametrize(
+    "extra", [{"zone": "SE"}, {"unit": "GWh"}, {"currency": "USD"}, {"zone": 5}]
+)
+def test_brief_rejects_unknown_zone_unit_or_currency(tmp_path, extra):
+    with make_client(tmp_path) as client:
+        assert client.post("/api/brief", json={**Q, **extra}).status_code == 422

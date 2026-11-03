@@ -69,6 +69,7 @@ def run_pipeline(
     *,
     use_planner: bool = False,
     use_critic: bool = False,
+    zone: str | None = None,
     input_guard: bool = True,
     output_guard: bool = True,
 ) -> PipelineResult:
@@ -94,9 +95,11 @@ def run_pipeline(
         if planner_completion:
             steps.append(_step("planner", settings.model_planner, planner_completion))
 
-    if plan.zone == UNSUPPORTED:
-        raise NoDataError("I only cover DE_LU, FR, NL, BE, AT and ES day-ahead prices for now.")
-    zone = DEFAULT_ZONE if plan.zone == UNSPECIFIED else plan.zone
+    # A zone chosen in the selector wins over any country named in the question.
+    if zone is None:
+        if plan.zone == UNSUPPORTED:
+            raise NoDataError("I only cover DE_LU, FR, NL, BE, AT and ES day-ahead prices for now.")
+        zone = DEFAULT_ZONE if plan.zone == UNSPECIFIED else plan.zone
     facts = get_facts(zone, plan.window_hours)
 
     brief, completion = write_brief(

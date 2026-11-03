@@ -19,20 +19,23 @@ from fastapi import FastAPI, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from watt_brief.alerts import AlertManager
-from watt_brief.chart import chart_payload
+from watt_brief.chart import ZONE_LABELS, chart_payload
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
+from watt_brief.fx import FxSource, RateSource, make_display
 from watt_brief.history import PriceHistory
 from watt_brief.limits import AbuseTracker, KillSwitch, RateLimiter, SpendTracker
 from watt_brief.llm import Completion, LLMClient, LLMError
 from watt_brief.logging import log, new_request_id
 from watt_brief.metrics import Metrics
 from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
+from watt_brief.planner import UNSPECIFIED
 from watt_brief.sources import SeriesSource, build_history, build_series_source, facts_from
+from watt_brief.units import CURRENCIES, UNITS
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,31 @@ MESSAGES = {
 
 class BriefRequest(BaseModel):
     question: str = Field(max_length=2000)
+    # Choices from the page. A zone given here wins over a country named in the question.
+    zone: str | None = None
+    unit: str = "MWh"
+    currency: str = "EUR"
+
+    @field_validator("zone")
+    @classmethod
+    def _zone_known(cls, value: str | None) -> str | None:
+        if value is not None and value not in ZONES:
+            raise ValueError("unknown zone")
+        return value
+
+    @field_validator("unit")
+    @classmethod
+    def _unit_known(cls, value: str) -> str:
+        if value not in UNITS:
+            raise ValueError("unknown unit")
+        return value
+
+    @field_validator("currency")
+    @classmethod
+    def _currency_known(cls, value: str) -> str:
+        if value not in CURRENCIES:
+            raise ValueError("unknown currency")
+        return value
 
 
 def create_app(
@@ -73,6 +101,7 @@ def create_app(
     get_facts: FactsSource | None = None,
     get_series: SeriesSource | None = None,
     history: PriceHistory | None = None,
+    get_rate: RateSource | None = None,
     llm_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     metrics = Metrics()
@@ -87,6 +116,7 @@ def create_app(
     series_source = get_series or build_series_source(settings, history)
     facts_source = get_facts or facts_from(series_source)
     price_limiter = RateLimiter(60, 2000)
+    rate_source = get_rate or FxSource()
     data_source = "synthetic" if settings.facts_source == "fixture" else "entsoe"
     metrics.spend_cap.set(settings.daily_spend_cap_usd)
 
@@ -214,6 +244,7 @@ def create_app(
                 facts_source,
                 use_planner=settings.use_planner,
                 use_critic=settings.use_critic,
+                zone=payload.zone,
             )
         except GuardRejected as exc:
             metrics.guard_rejections.labels(exc.stage, exc.reason).inc()
@@ -230,26 +261,42 @@ def create_app(
         finally:
             slots.release()
 
+        if payload.zone:
+            zone_source = "selector"
+        else:
+            zone_source = "default" if result.plan.zone == UNSPECIFIED else "question"
         body = {
             "recommendation": result.brief.recommendation,
             "reasoning": result.brief.reasoning,
             "caveats": result.brief.caveats,
             "zone": result.facts.zone,
+            "zone_source": zone_source,
             "window_hours": result.facts.window_hours,
             "data_source": data_source,
+            # The written brief quotes the facts, which stay in EUR/MWh. Only the chart converts.
+            "brief_unit": "EUR/MWh",
             "request_id": request_id,
         }
         try:
             series = series_source(result.facts.zone)
+            display = await run_in_threadpool(
+                make_display, payload.unit, payload.currency, rate_source
+            )
             body["chart"] = chart_payload(
-                series, result.facts.window_hours, data_source, previous_day(series)
+                series, result.facts.window_hours, data_source, previous_day(series), display
             )
         except (NoDataError, ValueError):
             pass  # the brief is still useful without the chart
         return finish("ok", 200, body, started)
 
     @app.get("/api/prices")
-    async def prices(request: Request, zone: str = "DE_LU", hours: int = 3):
+    async def prices(
+        request: Request,
+        zone: str = "DE_LU",
+        hours: int = 3,
+        unit: str = "MWh",
+        currency: str = "EUR",
+    ):
         """The day's price curve and its cheapest and priciest windows. No model call."""
         allowed, retry_after = price_limiter.check(client_key(request))
         if not allowed:
@@ -258,14 +305,25 @@ def create_app(
                 status_code=429,
                 headers={"Retry-After": str(retry_after)},
             )
-        if zone not in ZONES or not 1 <= hours <= 6:
-            return JSONResponse({"error": "Unknown zone or window."}, status_code=422)
+        if not (zone in ZONES and 1 <= hours <= 6 and unit in UNITS and currency in CURRENCIES):
+            return JSONResponse(
+                {"error": "Unknown zone, window, unit or currency."}, status_code=422
+            )
         try:
             series = series_source(zone)
-            payload = chart_payload(series, hours, data_source, previous_day(series))
+            display = await run_in_threadpool(make_display, unit, currency, rate_source)
+            payload = chart_payload(series, hours, data_source, previous_day(series), display)
         except (NoDataError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=404)
         return JSONResponse(payload, headers={"Cache-Control": "public, max-age=300"})
+
+    @app.get("/api/zones")
+    async def zones():
+        """The supported zones, so the page never keeps its own list."""
+        return JSONResponse(
+            [{"code": code, "label": ZONE_LABELS[code]} for code in ZONES],
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     @app.get("/healthz")
     async def healthz():

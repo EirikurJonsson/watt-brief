@@ -434,3 +434,43 @@ a:hover { text-decoration-thickness: 2px; }
   .plot { grid-template-columns: 2.25rem 1fr; grid-template-rows: 3.25rem var(--plot-height) 2.75rem; }
   .y-label { right: 0.35rem; font-size: 0.75rem; }
 }
+
+/* country, unit and currency choices */
+.controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1rem 2rem; margin-bottom: 0.5rem; }
+.field { margin: 0; padding: 0; border: 0; min-width: 0; font-size: 0.95rem; }
+.field label, .field legend { padding: 0; color: var(--ink-2); font-size: 0.85rem; }
+.combo { position: relative; }
+.combo label { display: block; margin-bottom: 0.25rem; }
+#zone-input {
+  width: 15rem;
+  max-width: 100%;
+  padding: 0.35rem 0;
+  border: 0;
+  border-bottom: 2px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+#zone-input:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.combo-list {
+  position: absolute;
+  z-index: 5;
+  top: 100%;
+  left: 0;
+  width: 15rem;
+  max-width: 100%;
+  max-height: 14rem;
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--baseline);
+  background: var(--surface);
+}
+.combo-option, .combo-empty { padding: 0.4rem 0.75rem; cursor: pointer; }
+.combo-empty { color: var(--ink-2); cursor: default; }
+.combo-option[aria-selected="true"] { background: var(--ink); color: var(--surface); }
+.seg label { display: inline-flex; align-items: center; gap: 0.35rem; margin-right: 1rem; color: var(--ink); font-size: 0.95rem; cursor: pointer; }
+.seg input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.fx-note { margin: 0 0 0.5rem; color: var(--ink-2); font-size: 0.85rem; }
