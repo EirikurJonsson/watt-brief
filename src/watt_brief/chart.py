@@ -15,6 +15,8 @@ ZONE_NAMES = {
     "BE": "Belgium",
     "AT": "Austria",
     "ES": "Spain",
+    "DK1": "Denmark West (DK1: Jutland and Funen)",
+    "DK2": "Denmark East (DK2: Zealand and Copenhagen)",
 }
 
 # Short labels for the country selector.
@@ -25,6 +27,8 @@ ZONE_LABELS = {
     "BE": "Belgium",
     "AT": "Austria",
     "ES": "Spain",
+    "DK1": "Denmark West (DK1)",
+    "DK2": "Denmark East (DK2)",
 }
 
 

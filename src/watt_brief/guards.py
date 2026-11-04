@@ -50,15 +50,25 @@ _TOPIC_STEMS = (
         r"stroom|elektr|energie|prijs|prijzen|tarief|goedkoop|duurst|warmtepomp|opladen|"
         r"wasmachine|vaatwasser|verbruik|zonnepanelen"
     ),
+    # Danish (strom, from "strøm", is in the German list)
+    (
+        r"\bel-?(pris|bil|forbrug|regning|afgift|tarif|net)|\bpris(en|er|erne)?\b|"
+        r"energi\b|billigst|dyrest|varmepumpe|oplad|vaskemaskine|opvaskemaskine|\btorretumbler|"
+        r"forbrug|solcelle|elkedel|negative priser|spotpris"
+    ),
 )
 _TOPIC = re.compile("|".join(_TOPIC_STEMS))
 
 # A second way in, for appliances no keyword list will ever finish: a question that asks when to
-# run, start, use or heat something is about timing a load. English only for now. It lets more
+# run, start, use or heat something is about timing a load. English, plus Danish for the Danish testers. It lets more
 # unusual questions reach the model, which the output guard, rate limits and spend cap exist for.
-_TIMING = re.compile(r"\b(when|what time|best time|which hour|what hour|best hour|cheapest time)\b")
+_TIMING = re.compile(
+    r"\b(when|what time|best time|which hour|what hour|best hour|cheapest time|"
+    r"hvornar|bedste tidspunkt|hvilken tid|hvilket tidspunkt|billigste tid)\b"
+)
 _ACTION = re.compile(
-    r"\b(run|start|turn on|switch on|turn up|use|charge|heat|cook|wash|boil|dry|do)\b"
+    r"\b(run|start|turn on|switch on|turn up|use|charge|heat|cook|wash|boil|dry|do|"
+    r"kore|kor|starte|taende|bruge|oplade|lade|varme|vaske|torre|koge|lave)\b"
 )
 
 _MARKUP = re.compile(
@@ -88,7 +98,9 @@ def normalize(text: str) -> str:
 
 def fold(text: str) -> str:
     """Lower-case and strip accents, so keyword stems match across the covered languages."""
-    decomposed = unicodedata.normalize("NFKD", text.lower().replace("\u00df", "ss"))
+    # \u00df, \u00f8 and \u00e6 do not decompose, so map them by hand (Strasse, Kobenhavn, Sjaelland).
+    lowered = text.lower().replace("\u00df", "ss").replace("\u00f8", "o").replace("\u00e6", "ae")
+    decomposed = unicodedata.normalize("NFKD", lowered)
     return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 

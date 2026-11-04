@@ -242,3 +242,14 @@ def test_recorded_es_response_ignores_the_intraday_auctions():
     assert len(series.points) == 96
     # the intraday auctions in the same response go down to -17.93
     assert min(p.eur_per_mwh for p in series.points) == 0.84
+
+
+def test_recorded_dk1_response_with_two_series_gives_one_clean_day():
+    series = parse_day_ahead_xml(fixture("live_dk1_2026-11-04.xml"), "DK1")
+    starts = [p.start for p in series.points]
+    assert len(starts) == len(set(starts)) == 96 and series.resolution_minutes == 15
+
+
+def test_recorded_dk2_response_parses():
+    series = parse_day_ahead_xml(fixture("live_dk2_2026-11-04.xml"), "DK2")
+    assert len(series.points) == 96

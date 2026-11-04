@@ -22,7 +22,7 @@ API_URL = "https://web-api.tp.entsoe.eu/api"
 DAY_AHEAD_PRICES = "A44"
 
 # Bidding zone EIC codes. Only zones listed here can be requested, so a user question can
-# never put free text into the URL. Verify each against the live API once the token arrives.
+# never put free text into the URL. Each was checked against the live API on 2 Nov 2026 (DK1 and DK2 on 4 Nov).
 ZONES = {
     "DE_LU": "10Y1001A1001A82H",
     "FR": "10YFR-RTE------C",
@@ -30,6 +30,8 @@ ZONES = {
     "BE": "10YBE----------2",
     "AT": "10YAT-APG------L",
     "ES": "10YES-REE------0",
+    "DK1": "10YDK-1--------W",
+    "DK2": "10YDK-2--------M",
 }
 
 _RESOLUTION = re.compile(r"^PT(\d+)M$")

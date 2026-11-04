@@ -35,7 +35,9 @@ Rules:
   "zone": one of {", ".join(ZONES)}, or {UNSPECIFIED} if the question names no country, or {UNSUPPORTED} if it names a
     country not in that list.
     (DE_LU is Germany and Luxembourg. FR France. NL Netherlands. BE Belgium. AT Austria.
-    ES Spain.)
+    ES Spain. DK1 is western Denmark: Jutland and Funen. DK2 is eastern Denmark: Zealand,
+    Copenhagen and the islands. If the question says Denmark without saying which part, or
+    names no Danish place, use {UNSPECIFIED}.)
   "window_hours": integer 1 to 6, how many consecutive hours of power the user needs.
     Use {DEFAULT_WINDOW_HOURS} if not stated.
   "intent": one of {", ".join(INTENTS)}.
@@ -72,7 +74,14 @@ ZONE_NAMES = {
     "BE": r"belgium|belgien|belgique|belgica|belgie|belgian|belge|brussel|bruxelles|bruselas",
     "AT": r"austria|osterreich|autriche|oostenrijk|austrian|wien|vienna|vienne|viena",
     "ES": r"spain|spanien|espagne|espana|spanje|spanish|espanol|madrid",
+    # Denmark has two zones, so only a place inside one of them names it. See DENMARK below.
+    "DK1": r"jutland|jylland|funen|fyn\b|aarhus|arhus|aalborg|alborg|odense|esbjerg|billund|kolding|"
+    r"vejle|horsens|randers|silkeborg|herning|viborg|\bdk ?(vest|west)",
+    "DK2": r"zealand|sjaelland|copenhagen|kobenhavn|kopenhagen|copenhague|kopenhaag|kobenhaven|"
+    r"roskilde|helsingor|elsinore|bornholm|lolland|falster|\bdk ?(ost|east)|amager|frederiksberg",
 }
+# "Denmark" on its own, in the covered languages. It is not a zone: DK1 and DK2 differ.
+DENMARK = r"denmark|danmark|danish|dansk|danemark|danois|danes|dinamarca|denemarken|deens|daenemark"
 _ZONE_CODES = {
     "DE_LU": r"\bDE\b",
     "FR": r"\bFR\b",
@@ -80,7 +89,17 @@ _ZONE_CODES = {
     "BE": r"\bBE\b",
     "AT": r"\bAT\b",
     "ES": r"\bES\b",
+    "DK1": r"\bDK1\b",
+    "DK2": r"\bDK2\b",
 }
+
+
+def names_denmark_only(question: str) -> bool:
+    """The question names Denmark but no place or code that says which of its two zones."""
+    folded = fold(question)
+    return bool(re.search(DENMARK, folded)) and not any(
+        zone_is_named(question, z) for z in ("DK1", "DK2")
+    )
 
 
 def zone_is_named(question: str, zone: str) -> bool:

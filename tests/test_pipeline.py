@@ -263,3 +263,48 @@ def test_a_guessed_zone_is_dropped_but_a_named_one_is_kept():
         client, settings(), "Quand l'électricité est-elle moins chère en France ?"
     )
     assert plan.zone == "FR"
+
+
+@pytest.mark.parametrize("plan_zone", ["UNSPECIFIED", "UNSUPPORTED"])
+@pytest.mark.parametrize(
+    "question",
+    ["Cheapest hours in Denmark tomorrow?", "Hvornår er strømmen billigst i Danmark?"],
+)
+def test_denmark_alone_asks_which_zone_instead_of_guessing(plan_zone, question):
+    plan = {"zone": plan_zone, "window_hours": 3, "intent": "general"}
+    client, calls = scripted({"planner-m": [j(plan)]})
+    with pytest.raises(NoDataError, match="DK1.*DK2"):
+        run_pipeline(client, settings(), question, facts_source(), use_planner=True)
+    assert [c[0] for c in calls] == ["planner-m"]  # no analyst call, no silent Germany
+
+
+def test_a_chosen_danish_zone_wins_over_the_word_denmark():
+    client, _ = scripted({"planner-m": [j(PLAN)], "analyst-m": [j(GOOD)]})
+    seen = []
+
+    def get(zone, hours):
+        seen.append(zone)
+        return facts_source()("DE_LU", hours)
+
+    run_pipeline(
+        client, settings(), "Cheapest hours in Denmark?", get, use_planner=True, zone="DK2"
+    )
+    assert seen == ["DK2"]
+
+
+@pytest.mark.parametrize(
+    ("question", "zone"),
+    [
+        ("Elpris i København i morgen?", "DK2"),
+        ("Strøm i Aarhus i aften?", "DK1"),
+        ("Cheapest hours in Jutland?", "DK1"),
+        ("Prices on Zealand tomorrow", "DK2"),
+        ("Hvad koster strøm på Sjælland?", "DK2"),
+        ("Prices in DK1 tomorrow", "DK1"),
+    ],
+)
+def test_danish_places_name_their_zone(question, zone):
+    from watt_brief.planner import zone_is_named
+
+    assert zone_is_named(question, zone)
+    assert not zone_is_named(question, "DK2" if zone == "DK1" else "DK1")

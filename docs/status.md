@@ -29,6 +29,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
     - Also add an external uptime check (the in-process alerts cannot fire if the service is down).
     - Test: unit test for the request shape, then trigger a real alert with the kill switch.
 15b. [x] Price history (2 Nov): SQLite `prices` table, written on every fetch, backs the stale fallback after a restart, backfill script, "compared with the day before" on the chart. Data freshness in `/healthz` plus a `stale_data` alert. Daily live contract check in CI (needs the `ENTSOE_API_TOKEN` repository secret). See docs/operations.md. Open: no feature reads history beyond the day-before figure; the brief itself does not yet use it (the grounding guards would need to learn the new numbers)
+15c. [x] Denmark (4 Nov): DK1 and DK2 added (EIC codes checked live, recorded fixtures). The guard understands Danish questions; "København", "Jylland" etc. name a zone, plain "Denmark" asks the user to pick one instead of guessing. Three planner eval cases added, not yet run live (they cost money). Open: briefs are still English only, which matters now (item 16)
 16. [ ] Product decision: should briefs be written in the language of the question? Today the
     question can be in five languages and the brief is always English.
 

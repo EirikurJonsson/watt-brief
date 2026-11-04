@@ -11,15 +11,28 @@ from watt_brief.analysis import PriceFacts
 from watt_brief.brief import Brief, write_brief
 from watt_brief.config import Settings
 from watt_brief.critic import Review, review_brief
+from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
 from watt_brief.guards import check_question
 from watt_brief.llm import Completion, LLMClient
 from watt_brief.logging import log
-from watt_brief.planner import DEFAULT_PLAN, UNSPECIFIED, UNSUPPORTED, Plan, make_plan
+from watt_brief.planner import (
+    DEFAULT_PLAN,
+    UNSPECIFIED,
+    UNSUPPORTED,
+    Plan,
+    make_plan,
+    names_denmark_only,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_ZONE = "DE_LU"
+
+DENMARK_AMBIGUOUS = (
+    "Denmark has two price zones: DK1 (Jutland and Funen) and DK2 (Zealand and Copenhagen). "
+    "Choose one in the country selector, or name a Danish city in your question."
+)
 
 # (zone, window_hours) -> facts. Raises NoDataError when the zone has no data.
 FactsSource = Callable[[str, int], PriceFacts]
@@ -97,8 +110,10 @@ def run_pipeline(
 
     # A zone chosen in the selector wins over any country named in the question.
     if zone is None:
+        if plan.zone in (UNSPECIFIED, UNSUPPORTED) and names_denmark_only(question):
+            raise NoDataError(DENMARK_AMBIGUOUS)
         if plan.zone == UNSUPPORTED:
-            raise NoDataError("I only cover DE_LU, FR, NL, BE, AT and ES day-ahead prices for now.")
+            raise NoDataError(f"I only cover {', '.join(ZONES)} day-ahead prices for now.")
         zone = DEFAULT_ZONE if plan.zone == UNSPECIFIED else plan.zone
     facts = get_facts(zone, plan.window_hours)
 

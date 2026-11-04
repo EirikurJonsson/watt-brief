@@ -470,6 +470,8 @@ def test_zones_endpoint_lists_code_and_label_for_every_supported_zone(tmp_path):
         {"code": "BE", "label": "Belgium"},
         {"code": "AT", "label": "Austria"},
         {"code": "ES", "label": "Spain"},
+        {"code": "DK1", "label": "Denmark West (DK1)"},
+        {"code": "DK2", "label": "Denmark East (DK2)"},
     ]
 
 
