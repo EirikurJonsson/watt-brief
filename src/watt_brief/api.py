@@ -26,7 +26,6 @@ from watt_brief.chart import ZONE_LABELS, chart_payload
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
-from watt_brief.fx import FxSource, RateSource, make_display
 from watt_brief.history import PriceHistory
 from watt_brief.limits import AbuseTracker, KillSwitch, RateLimiter, SpendTracker
 from watt_brief.llm import Completion, LLMClient, LLMError
@@ -35,7 +34,7 @@ from watt_brief.metrics import Metrics
 from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
 from watt_brief.planner import UNSPECIFIED
 from watt_brief.sources import SeriesSource, build_history, build_series_source, facts_from
-from watt_brief.units import CURRENCIES, UNITS
+from watt_brief.units import CURRENCIES, UNITS, make_display
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,6 @@ def create_app(
     get_facts: FactsSource | None = None,
     get_series: SeriesSource | None = None,
     history: PriceHistory | None = None,
-    get_rate: RateSource | None = None,
     llm_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
     metrics = Metrics()
@@ -116,7 +114,6 @@ def create_app(
     series_source = get_series or build_series_source(settings, history)
     facts_source = get_facts or facts_from(series_source)
     price_limiter = RateLimiter(60, 2000)
-    rate_source = get_rate or FxSource()
     data_source = "synthetic" if settings.facts_source == "fixture" else "entsoe"
     metrics.spend_cap.set(settings.daily_spend_cap_usd)
 
@@ -279,9 +276,7 @@ def create_app(
         }
         try:
             series = series_source(result.facts.zone)
-            display = await run_in_threadpool(
-                make_display, payload.unit, payload.currency, rate_source
-            )
+            display = make_display(payload.unit, payload.currency)
             body["chart"] = chart_payload(
                 series, result.facts.window_hours, data_source, previous_day(series), display
             )
@@ -311,7 +306,7 @@ def create_app(
             )
         try:
             series = series_source(zone)
-            display = await run_in_threadpool(make_display, unit, currency, rate_source)
+            display = make_display(unit, currency)
             payload = chart_payload(series, hours, data_source, previous_day(series), display)
         except (NoDataError, ValueError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=404)

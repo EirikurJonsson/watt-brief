@@ -76,12 +76,12 @@ def chart_payload(
         "unit": display.unit,
         "currency": display.currency,
         "price_label": display.label,
+        # The fixed ERM II central rate, shown so the conversion is never a hidden number.
         "fx": (
-            {"rate": display.rate, "date": display.rate_date, "source": "frankfurter.app"}
-            if display.rate_date
+            {"rate": display.rate, "basis": "fixed ERM II central rate"}
+            if display.currency != "EUR"
             else None
         ),
-        "currency_fallback": display.fallback,
         "mean": display.convert(facts.mean_eur_per_mwh),
         "previous_day": compare_with_previous(series, previous, display),
         "cheapest_window": {

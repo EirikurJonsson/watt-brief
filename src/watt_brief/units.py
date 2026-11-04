@@ -10,6 +10,10 @@ UNITS = ("MWh", "kWh")
 CURRENCIES = ("EUR", "DKK")
 KWH_PER_MWH = 1000
 
+# The krone is pegged to the euro (ERM II) with a central rate of 7.46038 DKK per EUR. It may drift
+# a little inside its band, but the rate is set by treaty, not the market: no live rate is fetched.
+DKK_PER_EUR = 7.46038
+
 
 def convert_price(eur_per_mwh: float, unit: str = "MWh", rate: float = 1.0) -> float:
     """EUR/MWh to <currency>/<unit>. `rate` is currency units per EUR (1.0 for EUR)."""
@@ -21,13 +25,11 @@ def convert_price(eur_per_mwh: float, unit: str = "MWh", rate: float = 1.0) -> f
 
 @dataclass(frozen=True)
 class Display:
-    """How prices are shown. `fallback` means DKK was asked for but no rate was available."""
+    """How prices are shown: a unit, a currency, and currency units per EUR."""
 
     unit: str = "MWh"
     currency: str = "EUR"
     rate: float = 1.0
-    rate_date: str | None = None
-    fallback: bool = False
 
     @property
     def label(self) -> str:
@@ -38,3 +40,7 @@ class Display:
 
 
 EUR_PER_MWH = Display()
+
+
+def make_display(unit: str, currency: str) -> Display:
+    return Display(unit=unit, currency=currency, rate=DKK_PER_EUR if currency == "DKK" else 1.0)

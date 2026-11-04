@@ -40,8 +40,7 @@
   const priceBasis = (c) => {
     if (c.fx) {
       return (
-        perWords(c) + ", converted from EUR per MWh at 1 EUR = " + c.fx.rate + " DKK (ECB rate of " +
-        c.fx.date + ", via " + c.fx.source + ")"
+        perWords(c) + ", converted from EUR per MWh at the fixed rate 1 EUR = " + c.fx.rate + " DKK"
       );
     }
     return perWords(c) + (c.unit === "kWh" ? ", converted from EUR per MWh (1 MWh = 1000 kWh)" : "");
@@ -290,11 +289,9 @@
     $("foot-note").textContent =
       "Prices are day-ahead, in " + priceBasis(c) + ". Times are UTC unless a time zone is named. " +
       "Guidance only, not financial advice.";
-    $("fx-note").textContent = c.currency_fallback
-      ? "The EUR/DKK rate could not be fetched, so prices are shown in EUR."
-      : c.fx
-        ? "1 EUR = " + c.fx.rate + " DKK, ECB rate of " + c.fx.date + ", via " + c.fx.source + "."
-        : "";
+    $("fx-note").textContent = c.fx
+      ? "1 EUR = " + c.fx.rate + " DKK, the fixed central rate the krone is pegged to."
+      : "";
   }
 
   function render(payload, animate) {
