@@ -84,4 +84,4 @@ def test_the_page_loads_the_translations_before_the_app_and_declares_each_langua
     html = (STATIC / "index.html").read_text()
     assert html.index("i18n.js") < html.index("app.js")
     for lang in LANGS:
-        assert f'name="language" value="{lang}"' in html
+        assert f'<option value="{lang}">' in html

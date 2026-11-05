@@ -96,6 +96,17 @@ a:hover { text-decoration-thickness: 2px; }
   text-decoration: none;
 }
 .top-link { font-size: 0.95rem; color: var(--ink-2); }
+.top-right { display: flex; align-items: baseline; gap: 1rem; }
+.lang-select {
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ink-2);
+  padding: 0 0.15rem;
+  cursor: pointer;
+}
 
 /* hero */
 .hero { padding-block: clamp(1.5rem, 4vw, 3rem) 0; }

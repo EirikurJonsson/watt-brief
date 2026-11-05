@@ -69,13 +69,25 @@ service is down, so also point an external uptime check at `/healthz`.
 
 ## Price data and history
 
-- **Cache.** Real prices are cached per zone for one hour, one fetch at a time per zone, so user
-  traffic cannot reach ENTSO-E more than about six times an hour.
-- **When ENTSO-E fails.** A refresh that fails serves the old prices for up to 12 hours (the chart
-  shows the fetch time). `/healthz` then reports `"status": "degraded"`, lists `stale_zones`, and a
-  `stale_data` warning goes to the alert webhook. `oldest_fetch_age_minutes` shows how old the
-  least recently fetched zone is. The container healthcheck still passes: stale prices are
-  degraded service, not a dead one.
+- **Fetch once.** Day-ahead prices for a delivery day are final once published, so each zone and
+  day is fetched once, then served from memory and from the history table. Nothing expires by age,
+  and a restart needs no ENTSO-E calls. That is about one request per zone per day, plus the
+  checks for tomorrow below.
+- **Tomorrow's prices** exist from about 12:45 Brussels time. They are not requested before
+  12:30; after that the service asks every 10 minutes until they appear, then keeps them. Until
+  then today's prices are served. If they are still missing at 15:00, `/healthz` reports
+  `"status": "degraded"` with the zones in `stale_zones`, and a `stale_data` warning goes to the
+  alert webhook. The container healthcheck still passes.
+- **Warm-up.** A background task fetches every zone at start-up and every 5 minutes after, so a
+  user's request finds the prices already in the cache. `prices_through` in `/healthz` is the last
+  delivery date held for every zone. If ENTSO-E is down for today's prices, requests get "not
+  available" and are retried at most once a minute.
+- **Default zone** is DK1 (`DEFAULT_ZONE` overrides it; the synthetic demo day is German, so it
+  uses DE_LU). It applies when neither the page nor the question names a country.
+- **Languages.** The page and the written brief come in English, Danish, German and French. The
+  choice defaults to the browser's language and is remembered in that browser only. Server errors
+  carry a stable `code`; the page shows its own translation of it, and API users get the English
+  `error` text.
 - **History.** Every fetch is upserted into `data/history.sqlite` (table `prices`: zone, UTC slot
   start, EUR/MWh, resolution, fetch time), only when `FACTS_SOURCE=entsoe`. It survives restarts,
   answers when ENTSO-E is down after a restart, and gives the "compared with the day before" line.

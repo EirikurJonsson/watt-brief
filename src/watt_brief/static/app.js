@@ -25,7 +25,8 @@
   const pad = (n) => String(n).padStart(2, "0");
 
   const utcHM = (d) => pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
-  const localHM = (d) => localTime.format(d);
+  // Danish writes 10.00; the page shows every time as 10:00 so UTC and local times match.
+  const localHM = (d) => localTime.format(d).replace(".", ":");
   const sameAsUtc = (d) => localHM(d) === utcHM(d);
   const zoneName = (d) => {
     const part = zoneFormat.formatToParts(d).find((p) => p.type === "timeZoneName");
@@ -537,15 +538,11 @@
   function setLanguage(code, persist) {
     I18N.set(code, persist);
     choice.language = I18N.lang;
-    for (const radio of document.querySelectorAll('input[name="language"]')) {
-      radio.checked = radio.value === I18N.lang;
-    }
+    $("language").value = I18N.lang;
     applyLanguage();
   }
 
-  for (const radio of document.querySelectorAll('input[name="language"]')) {
-    radio.addEventListener("change", () => setLanguage(radio.value, true));
-  }
+  $("language").addEventListener("change", (event) => setLanguage(event.target.value, true));
 
   async function loadZones() {
     try {

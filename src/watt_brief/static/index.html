@@ -25,7 +25,16 @@
 <body>
   <header class="wrap top">
     <a class="brand" href="/">watt-brief</a>
-    <a class="top-link" href="https://github.com/EirikurJonsson/watt-brief" data-i18n="source_link">Source and evals</a>
+    <div class="top-right">
+      <a class="top-link" href="https://github.com/EirikurJonsson/watt-brief" data-i18n="source_link">Source and evals</a>
+      <label class="sr-only" for="language" data-i18n="language">Language</label>
+      <select id="language" class="lang-select" name="language">
+        <option value="en">English</option>
+        <option value="da">Dansk</option>
+        <option value="de">Deutsch</option>
+        <option value="fr">Français</option>
+      </select>
+    </div>
   </header>
 
   <main class="wrap">
@@ -47,13 +56,6 @@
           <legend data-i18n="currency">Currency</legend>
           <label><input type="radio" name="currency" value="EUR" checked> EUR</label>
           <label><input type="radio" name="currency" value="DKK"> DKK</label>
-        </fieldset>
-        <fieldset class="field seg">
-          <legend data-i18n="language">Language</legend>
-          <label><input type="radio" name="language" value="en" checked> English</label>
-          <label><input type="radio" name="language" value="da"> Dansk</label>
-          <label><input type="radio" name="language" value="de"> Deutsch</label>
-          <label><input type="radio" name="language" value="fr"> Français</label>
         </fieldset>
       </div>
       <p class="fx-note" data-i18n="clear_hint">Clear the country field to let your question choose the country.</p>
