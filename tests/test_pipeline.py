@@ -308,3 +308,18 @@ def test_danish_places_name_their_zone(question, zone):
 
     assert zone_is_named(question, zone)
     assert not zone_is_named(question, "DK2" if zone == "DK1" else "DK1")
+
+
+def test_a_question_that_names_no_country_uses_the_configured_default_zone():
+    seen = []
+
+    def get(zone, hours):
+        seen.append(zone)
+        return facts_source()("DE_LU", hours)
+
+    unspecified = {"zone": "UNSPECIFIED", "window_hours": 3, "intent": "general"}
+    for default in ("DK1", "FR"):
+        cfg = settings().model_copy(update={"default_zone": default})
+        client, _ = scripted({"planner-m": [j(unspecified)], "analyst-m": [j(GOOD)]})
+        run_pipeline(client, cfg, "When is power cheapest tomorrow?", get, use_planner=True)
+    assert seen == ["DK1", "FR"]

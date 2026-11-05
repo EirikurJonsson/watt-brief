@@ -40,6 +40,9 @@ class Settings(BaseSettings):
 
     # Service. "fixture" serves synthetic data and says so in every response.
     facts_source: Literal["fixture", "entsoe"] = "fixture"
+    # The zone used when neither the page nor the question names one. Unset means DK1, or DE_LU
+    # for the synthetic fixture, which is a German day and has no data for any other zone.
+    default_zone: str | None = None
 
     # Abuse controls.
     daily_spend_cap_usd: float = 1.0
@@ -59,6 +62,12 @@ class Settings(BaseSettings):
     alert_webhook_url: str | None = None
     # "ntfy" sends plain text with Title/Priority/Tags headers, as ntfy expects.
     alert_webhook_format: Literal["json", "ntfy"] = "json"
+
+    @property
+    def effective_default_zone(self) -> str:
+        if self.default_zone:
+            return self.default_zone
+        return "DE_LU" if self.facts_source == "fixture" else "DK1"
 
     @field_validator("entsoe_api_token", "metrics_token", "alert_webhook_url", mode="before")
     @classmethod

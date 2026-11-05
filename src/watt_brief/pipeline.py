@@ -27,8 +27,6 @@ from watt_brief.planner import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ZONE = "DE_LU"
-
 DENMARK_AMBIGUOUS = (
     "Denmark has two price zones: DK1 (Jutland and Funen) and DK2 (Zealand and Copenhagen). "
     "Choose one in the country selector, or name a Danish city in your question."
@@ -115,7 +113,7 @@ def run_pipeline(
             raise NoDataError(DENMARK_AMBIGUOUS)
         if plan.zone == UNSUPPORTED:
             raise NoDataError(f"I only cover {', '.join(ZONES)} day-ahead prices for now.")
-        zone = DEFAULT_ZONE if plan.zone == UNSPECIFIED else plan.zone
+        zone = settings.effective_default_zone if plan.zone == UNSPECIFIED else plan.zone
     facts = get_facts(zone, plan.window_hours)
 
     brief, completion = write_brief(

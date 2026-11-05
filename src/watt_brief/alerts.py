@@ -1,7 +1,7 @@
 """Alert rules. Pure evaluation plus a small manager that de-duplicates and notifies.
 
 Rules fire on spend nearing the cap, an error spike, an abuse pattern, the kill switch, and
-prices being served from old data.
+tomorrow's prices still missing late in the afternoon.
 Notification is a structured log line, plus an optional webhook if one is configured. The webhook
 body is `{"text": ...}` JSON by default, or a plain-text ntfy message (`webhook_format="ntfy"`).
 """
@@ -62,7 +62,7 @@ def evaluate(
             Alert(
                 "stale_data",
                 "warning",
-                f"ENTSO-E refresh failed; serving old prices for {', '.join(stale_zones)}.",
+                f"Tomorrow's prices are still missing for {', '.join(stale_zones)}; showing today's.",
             )
         )
     if kill_active:

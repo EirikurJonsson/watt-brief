@@ -4,6 +4,7 @@ Order of checks, cheapest first: kill switch, ban, rate limit, spend cap, body s
 concurrency, then the pipeline. Error bodies are fixed messages and never echo user input.
 """
 
+import asyncio
 import hmac
 import ipaddress
 import json
@@ -34,7 +35,13 @@ from watt_brief.logging import log, new_request_id
 from watt_brief.metrics import Metrics
 from watt_brief.pipeline import FactsSource, NoDataError, run_pipeline
 from watt_brief.planner import UNSPECIFIED
-from watt_brief.sources import SeriesSource, build_history, build_series_source, facts_from
+from watt_brief.sources import (
+    WARM_INTERVAL_SECONDS,
+    SeriesSource,
+    build_history,
+    build_series_source,
+    facts_from,
+)
 from watt_brief.units import CURRENCIES, UNITS, make_display
 
 logger = logging.getLogger(__name__)
@@ -111,6 +118,8 @@ def create_app(
     history: PriceHistory | None = None,
     llm_transport: httpx.BaseTransport | None = None,
 ) -> FastAPI:
+    if settings.effective_default_zone not in ZONES:
+        raise ValueError(f"DEFAULT_ZONE must be one of {', '.join(ZONES)}")
     metrics = Metrics()
     spend = SpendTracker(settings.spend_db_path)
     kill = KillSwitch(settings.kill_switch_file)
@@ -153,9 +162,23 @@ def create_app(
         on_retry=lambda step, reason: metrics.llm_retries.labels(reason).inc(),
     )
 
+    warm = getattr(series_source, "warm", None)
+
+    async def keep_warm() -> None:
+        """Fetch ahead of users: today's prices at start-up, tomorrow's as soon as they exist."""
+        while True:
+            try:
+                await run_in_threadpool(warm)  # type: ignore[arg-type]
+            except Exception:  # never let the warm-up loop die
+                logger.exception("warm_failed")
+            await asyncio.sleep(WARM_INTERVAL_SECONDS)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        warmer = asyncio.create_task(keep_warm()) if warm else None
         yield
+        if warmer:
+            warmer.cancel()
         llm.close()
         spend.close()
         if history is not None:
@@ -298,7 +321,7 @@ def create_app(
     @app.get("/api/prices")
     async def prices(
         request: Request,
-        zone: str = "DE_LU",
+        zone: str | None = None,
         hours: int = 3,
         unit: str = "MWh",
         currency: str = "EUR",
@@ -311,6 +334,7 @@ def create_app(
                 status_code=429,
                 headers={"Retry-After": str(retry_after)},
             )
+        zone = zone or settings.effective_default_zone
         if not (zone in ZONES and 1 <= hours <= 6 and unit in UNITS and currency in CURRENCIES):
             return JSONResponse(
                 {"error": "Unknown zone, window, unit or currency."}, status_code=422
@@ -338,14 +362,13 @@ def create_app(
         killed = kill.active()
         stale = stale_zones()
         status = "degraded" if killed or used >= 1.0 or stale else "ok"
-        age_report = getattr(series_source, "oldest_fetch_age_seconds", None)
-        age = age_report() if age_report else None
+        through_report = getattr(series_source, "prices_through", None)
         return {
             "status": status,
             "spend_used_pct": round(min(used, 9.99) * 100),
             "data_source": "synthetic" if settings.facts_source == "fixture" else "entsoe",
             "stale_zones": stale,
-            "oldest_fetch_age_minutes": None if age is None else round(age / 60),
+            "prices_through": through_report() if through_report else None,
         }
 
     @app.get("/metrics")

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from watt_brief.api import create_app
 from watt_brief.config import Settings
-from watt_brief.sources import fixture_facts_source
+from watt_brief.sources import fixture_facts_source, fixture_series_source
 
 GOOD = {
     "recommendation": "Run from 10:00 to 13:00 UTC at an average of 3.0 EUR/MWh.",
@@ -388,11 +388,11 @@ class StaleSource:
     def serving_stale(self):
         return ["DE_LU"]
 
-    def oldest_fetch_age_seconds(self):
-        return 5400.0
+    def prices_through(self):
+        return "2026-11-05"
 
 
-def test_healthz_degrades_and_reports_age_when_serving_old_prices(tmp_path):
+def test_healthz_degrades_when_tomorrows_prices_are_overdue(tmp_path):
     from watt_brief.sources import fixture_series_source
 
     app = create_app(
@@ -403,7 +403,7 @@ def test_healthz_degrades_and_reports_age_when_serving_old_prices(tmp_path):
     with TestClient(app) as client:
         body = client.get("/healthz").json()
     assert body["status"] == "degraded"
-    assert body["stale_zones"] == ["DE_LU"] and body["oldest_fetch_age_minutes"] == 90
+    assert body["stale_zones"] == ["DE_LU"] and body["prices_through"] == "2026-11-05"
 
 
 def test_healthz_is_ok_with_no_stale_data(tmp_path):
@@ -570,3 +570,26 @@ def test_a_danish_brief_still_cannot_invent_a_number(tmp_path):
 def test_unknown_language_is_rejected(tmp_path):
     with make_client(tmp_path) as client:
         assert client.post("/api/brief", json={**Q, "language": "xx"}).status_code == 422
+
+
+def test_prices_without_a_zone_use_the_default_zone(tmp_path):
+    seen = []
+    real = fixture_series_source()
+
+    def series(zone):
+        seen.append(zone)
+        return real("DE_LU")
+
+    app = create_app(
+        make_settings(tmp_path, default_zone="DE_LU"),
+        get_series=series,
+        llm_transport=httpx.MockTransport(llm_handler()),
+    )
+    with TestClient(app) as client:
+        assert client.get("/api/prices").status_code == 200
+    assert seen == ["DE_LU"]
+
+
+def test_an_unknown_default_zone_stops_the_app_from_starting(tmp_path):
+    with pytest.raises(ValueError, match="DEFAULT_ZONE"):
+        create_app(make_settings(tmp_path, default_zone="XX"))
