@@ -37,9 +37,11 @@ WARM_INTERVAL_SECONDS = 300
 SeriesSource = Callable[[str], PriceSeries]
 
 
-def facts_from(series_source: SeriesSource) -> FactsSource:
+def facts_from(
+    series_source: SeriesSource, clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> FactsSource:
     def get(zone: str, window_hours: int) -> PriceFacts:
-        return analyse(series_source(zone), window_hours=window_hours)
+        return analyse(series_source(zone), window_hours=window_hours, now=clock())
 
     return get
 

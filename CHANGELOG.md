@@ -16,5 +16,7 @@ Notable changes, newest first. Versions are git tags; the running commit is show
   CI. Nightly live evals with pass thresholds (`--gate`).
 - Graceful shutdown verified by test (in-flight request survives SIGTERM); compose fragment
   gets `stop_grace_period: 30s`.
+- Briefs and the chart no longer recommend a window that has already started: part-way through
+  today, only windows from the current slot onward are considered (`windows_from_utc` in the facts).
 - CI: dependency audit, image build attestations (provenance and SBOM), deploy that checks the
   running commit, rolls back on failure and can smoke test the live site.

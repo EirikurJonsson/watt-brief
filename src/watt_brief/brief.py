@@ -30,6 +30,8 @@ Rules:
 - All times are UTC. State that when you cite a time. Write times as HH:MM (10:00 UTC) and
   dates as a day and month (31 October). Never write ISO timestamps such as 2026-10-31T10:00Z.
 - Prices are EUR per MWh, day-ahead, for one bidding zone.
+- If "windows_from_utc" is set, the cheapest and priciest windows only consider times from then
+  on, because earlier times have passed. Say the window is from now onward, not for the whole day.
 - Reply with one JSON object and nothing else, with exactly these keys:
   "recommendation": one or two sentences, the decision first.
   "reasoning": two to four sentences citing numbers from FACTS.

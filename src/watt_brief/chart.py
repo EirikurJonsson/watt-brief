@@ -1,5 +1,6 @@
 """What the UI needs to draw the price chart. Pure data, no model involved."""
 
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from watt_brief.analysis import analyse
@@ -61,9 +62,10 @@ def chart_payload(
     data_source: str,
     previous: PriceSeries | None = None,
     display: Display = EUR_PER_MWH,
+    now: datetime | None = None,
 ) -> dict:
     """Series plus the two highlighted windows, computed by the same code the brief uses."""
-    facts = analyse(series, window_hours=window_hours)
+    facts = analyse(series, window_hours=window_hours, now=now)
     return {
         "zone": series.zone,
         "zone_name": ZONE_NAMES.get(series.zone, series.zone),

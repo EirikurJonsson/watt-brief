@@ -53,3 +53,48 @@ def test_quarter_hour_series():
 
 def test_window_spread_is_priciest_minus_cheapest():
     assert analyse(full_day()).window_spread_eur_per_mwh == pytest.approx(136.0)
+
+
+def at(hour: int, minute: int = 0):
+    from datetime import UTC, datetime
+
+    return datetime(2026, 10, 31, hour, minute, tzinfo=UTC)
+
+
+def test_windows_that_have_already_started_are_not_recommended_part_way_through_the_day():
+    facts = analyse(full_day(), now=at(14, 30))
+    assert facts.windows_from_utc == "2026-10-31T14:00Z"
+    assert facts.cheapest_window.start_utc >= "2026-10-31T14:00Z"
+    assert facts.priciest_window.start_utc >= "2026-10-31T14:00Z"
+    assert (
+        analyse(full_day()).cheapest_window.start_utc == "2026-10-31T10:00Z"
+    )  # whole day unchanged
+
+
+def test_a_window_starting_in_the_current_slot_is_still_usable():
+    facts = analyse(full_day(), now=at(10, 20))
+    assert facts.windows_from_utc == "2026-10-31T10:00Z"
+    assert facts.cheapest_window.start_utc == "2026-10-31T10:00Z"
+
+
+def test_whole_day_statistics_do_not_change_with_the_time():
+    whole, later = analyse(full_day()), analyse(full_day(), now=at(14, 30))
+    assert (whole.mean_eur_per_mwh, whole.min_at_utc, whole.max_at_utc) == (
+        later.mean_eur_per_mwh,
+        later.min_at_utc,
+        later.max_at_utc,
+    )
+
+
+def test_prices_still_to_come_are_analysed_whole():
+    from datetime import UTC, datetime
+
+    facts = analyse(full_day(), now=datetime(2026, 10, 30, 12, tzinfo=UTC))
+    assert facts.windows_from_utc is None
+    assert facts.cheapest_window.start_utc == "2026-10-31T10:00Z"
+
+
+def test_a_day_with_no_window_left_falls_back_to_the_whole_day():
+    facts = analyse(full_day(), now=at(21, 30))  # fewer than three hours remain
+    assert facts.windows_from_utc is None
+    assert facts.cheapest_window.start_utc == "2026-10-31T10:00Z"

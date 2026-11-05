@@ -13,7 +13,7 @@ import os
 import threading
 import time
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -327,7 +327,12 @@ def create_app(
             series = series_source(result.facts.zone)
             display = make_display(payload.unit, payload.currency)
             body["chart"] = chart_payload(
-                series, result.facts.window_hours, data_source, previous_day(series), display
+                series,
+                result.facts.window_hours,
+                data_source,
+                previous_day(series),
+                display,
+                datetime.now(UTC),
             )
         except (NoDataError, ValueError):
             pass  # the brief is still useful without the chart
@@ -358,7 +363,9 @@ def create_app(
         try:
             series = series_source(zone)
             display = make_display(unit, currency)
-            payload = chart_payload(series, hours, data_source, previous_day(series), display)
+            payload = chart_payload(
+                series, hours, data_source, previous_day(series), display, datetime.now(UTC)
+            )
         except (NoDataError, ValueError) as exc:
             code = exc.code if isinstance(exc, NoDataError) else "no_data"
             return JSONResponse({"error": str(exc), "code": code}, status_code=404)
