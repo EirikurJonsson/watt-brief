@@ -25,7 +25,7 @@ const chrome = spawn(process.env.CHROME_BIN || "chromium", [
 ], { stdio: "ignore" });
 
 async function targetWs() {
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 150; i++) { // 30 s: a cold CI runner can be slow to start Chrome
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
       const page = list.find((t) => t.type === "page");
