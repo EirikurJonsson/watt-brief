@@ -45,7 +45,7 @@ def test_fixture_other_zone_is_no_data():
 
 
 def test_delivery_days_are_brussels_days_in_utc():
-    # 2026-10-31 12:00 UTC is 13:00 in Brussels (CET, after the clocks go back on the 25th)
+    # 2026-10-31 12:00 UTC is 13:00 in Brussels (Brussels winter time, after the clocks go back on the 25th)
     tomorrow, today = _delivery_days(datetime(2026, 10, 31, 12, tzinfo=UTC))
     assert tomorrow[0] == datetime(2026, 10, 31, 23, tzinfo=UTC)
     assert today[0] == datetime(2026, 10, 30, 23, tzinfo=UTC)

@@ -9,29 +9,17 @@
   const MINUS = "−";
   const t = I18N.t;
   // Number and time formats follow the chosen language; setFormats() rebuilds them on a change.
-  let numberFormat, kwhFormat, localTime, zoneFormat, rateFormat;
-  let priceFormat;
+  let priceFormat, rateFormat;
   function setFormats() {
     const locale = I18N.locale;
-    numberFormat = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-    // Per-kWh prices are small, so they need more decimals than per-MWh ones.
-    kwhFormat = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    // Prices are shown to two decimals, per MWh and per kWh alike.
+    priceFormat = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     rateFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 5 });
-    localTime = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
-    zoneFormat = new Intl.DateTimeFormat(locale, { timeZoneName: "short" });
-    priceFormat = chart && chart.unit === "kWh" ? kwhFormat : numberFormat;
   }
   const fmt = (value) => priceFormat.format(value).replace("-", MINUS);
   const pad = (n) => String(n).padStart(2, "0");
 
   const utcHM = (d) => pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
-  // Danish writes 10.00; the page shows every time as 10:00 so UTC and local times match.
-  const localHM = (d) => localTime.format(d).replace(".", ":");
-  const sameAsUtc = (d) => localHM(d) === utcHM(d);
-  const zoneName = (d) => {
-    const part = zoneFormat.formatToParts(d).find((p) => p.type === "timeZoneName");
-    return part ? part.value : "";
-  };
   const upperFirst = (text) => text.charAt(0).toUpperCase() + text.slice(1);
   const hoursLabel = (n) => I18N.hours(n);
   const perWords = (c) => c.price_label.replace("/", t("per"));
@@ -87,7 +75,6 @@
 
   function derive(payload) {
     chart = payload;
-    priceFormat = payload.unit === "kWh" ? kwhFormat : numberFormat;
     pts = payload.points.map(([iso, price]) => ({ iso, t: new Date(iso), price }));
     scale = makeScale(pts.map((p) => p.price));
     const per = (payload.window_hours * 60) / payload.resolution_minutes;
@@ -218,14 +205,11 @@
   function renderTable() {
     const body = $("table-body");
     body.replaceChildren();
-    const first = pts[0] ? pts[0].t : new Date();
-    $("local-col").textContent = t("col_local", { zone: zoneName(first) });
     $("price-col").textContent = t("col_price", { label: chart.price_label });
     $("table-caption").textContent = t("table_caption", { basis: perWords(chart) });
     pts.forEach((p, i) => {
       const row = el("tr");
       row.appendChild(el("td", "", utcHM(p.t)));
-      row.appendChild(el("td", "", localHM(p.t)));
       row.appendChild(el("td", "", fmt(p.price)));
       const kind = windowOf(i);
       row.appendChild(el("td", "", kind === "cheap" ? t("note_cheap") : kind === "pricey" ? t("note_pricey") : ""));
@@ -255,9 +239,6 @@
     $("answer").textContent = t("answer", { from: utcHM(from), to: utcHM(to) });
 
     const parts = [];
-    if (!sameAsUtc(from)) {
-      parts.push(t("detail_local", { from: localHM(from), to: localHM(to), zone: zoneName(from) }));
-    }
     parts.push(
       t("detail_average", { avg: fmt(c.cheapest_window.avg), label: c.price_label, mean: fmt(c.mean) })
     );
@@ -312,7 +293,7 @@
 
   function tipText(i) {
     const p = pts[i];
-    const when = utcHM(p.t) + " UTC" + (sameAsUtc(p.t) ? "" : ", " + localHM(p.t) + " " + zoneName(p.t));
+    const when = utcHM(p.t) + " UTC";
     const kind = windowOf(i);
     const note = kind === "cheap" ? t("tip_cheap") : kind === "pricey" ? t("tip_pricey") : "";
     return { value: fmt(p.price) + " " + chart.price_label, when, note, kind };
