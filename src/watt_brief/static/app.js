@@ -7,26 +7,24 @@
   // ---------- formatting ----------
 
   const MINUS = "−";
-  const numberFormat = new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 2,
-  });
-  // Per-kWh prices are small, so they need more decimals than per-MWh ones.
-  const kwhFormat = new Intl.NumberFormat("en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  });
-  let priceFormat = numberFormat;
+  const t = I18N.t;
+  // Number and time formats follow the chosen language; setFormats() rebuilds them on a change.
+  let numberFormat, kwhFormat, localTime, zoneFormat, rateFormat;
+  let priceFormat;
+  function setFormats() {
+    const locale = I18N.locale;
+    numberFormat = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+    // Per-kWh prices are small, so they need more decimals than per-MWh ones.
+    kwhFormat = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    rateFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 5 });
+    localTime = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", hour12: false });
+    zoneFormat = new Intl.DateTimeFormat(locale, { timeZoneName: "short" });
+    priceFormat = chart && chart.unit === "kWh" ? kwhFormat : numberFormat;
+  }
   const fmt = (value) => priceFormat.format(value).replace("-", MINUS);
   const pad = (n) => String(n).padStart(2, "0");
 
   const utcHM = (d) => pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
-  const localTime = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const zoneFormat = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" });
   const localHM = (d) => localTime.format(d);
   const sameAsUtc = (d) => localHM(d) === utcHM(d);
   const zoneName = (d) => {
@@ -34,16 +32,14 @@
     return part ? part.value : "";
   };
   const upperFirst = (text) => text.charAt(0).toUpperCase() + text.slice(1);
-  const hoursLabel = (n) => n + (n === 1 ? " hour" : " hours");
-  const perWords = (c) => c.price_label.replace("/", " per ");
+  const hoursLabel = (n) => I18N.hours(n);
+  const perWords = (c) => c.price_label.replace("/", t("per"));
+  const zoneName_ = (c) => I18N.zone(c.zone, 1) || c.zone_name;
   // Which prices these are, and where any conversion came from. Shown on every render.
   const priceBasis = (c) => {
-    if (c.fx) {
-      return (
-        perWords(c) + ", converted from EUR per MWh at the fixed rate 1 EUR = " + c.fx.rate + " DKK"
-      );
-    }
-    return perWords(c) + (c.unit === "kWh" ? ", converted from EUR per MWh (1 MWh = 1000 kWh)" : "");
+    const words = perWords(c);
+    if (c.fx) return t("basis_fx", { words, rate: rateFormat.format(c.fx.rate) });
+    return c.unit === "kWh" ? t("basis_kwh", { words }) : words;
   };
 
   // ---------- state ----------
@@ -222,16 +218,16 @@
     const body = $("table-body");
     body.replaceChildren();
     const first = pts[0] ? pts[0].t : new Date();
-    $("local-col").textContent = "Your time (" + zoneName(first) + ")";
-    $("price-col").textContent = "Price (" + chart.price_label + ")";
-    $("table-caption").textContent = "Day-ahead prices in " + perWords(chart);
+    $("local-col").textContent = t("col_local", { zone: zoneName(first) });
+    $("price-col").textContent = t("col_price", { label: chart.price_label });
+    $("table-caption").textContent = t("table_caption", { basis: perWords(chart) });
     pts.forEach((p, i) => {
       const row = el("tr");
       row.appendChild(el("td", "", utcHM(p.t)));
       row.appendChild(el("td", "", localHM(p.t)));
       row.appendChild(el("td", "", fmt(p.price)));
       const kind = windowOf(i);
-      row.appendChild(el("td", "", kind === "cheap" ? "Cheapest window" : kind === "pricey" ? "Priciest window" : ""));
+      row.appendChild(el("td", "", kind === "cheap" ? t("note_cheap") : kind === "pricey" ? t("note_pricey") : ""));
       body.appendChild(row);
     });
   }
@@ -239,59 +235,56 @@
   function renderHero() {
     const c = chart;
     const day = pts[Math.floor(pts.length / 2)].t;
-    const dayText = day.toLocaleDateString("en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+    const dayText = day.toLocaleDateString(I18N.locale, { day: "numeric", month: "long", timeZone: "UTC" });
     const source =
       c.data_source === "synthetic"
-        ? "Synthetic demo data, not market prices."
-        : "Day-ahead prices from ENTSO-E" +
-          (c.fetched_at ? ", fetched " + utcHM(new Date(c.fetched_at)) + " UTC." : ".");
+        ? t("source_synthetic")
+        : c.fetched_at
+          ? t("source_real_fetched", { time: utcHM(new Date(c.fetched_at)) })
+          : t("source_real");
     let versus = "";
     const prev = c.previous_day;
     if (prev && prev.change_pct !== null && Math.abs(prev.change_pct) >= 1) {
-      versus =
-        " On average " + Math.abs(prev.change_pct) + "% " +
-        (prev.change_pct < 0 ? "cheaper" : "dearer") + " than the day before.";
+      versus = " " + t(prev.change_pct < 0 ? "versus_cheaper" : "versus_dearer", { pct: Math.abs(prev.change_pct) });
     }
-    $("context").textContent = upperFirst(c.zone_name) + ", " + dayText + ". " + source + versus;
+    $("context").textContent = upperFirst(zoneName_(c)) + ", " + dayText + ". " + source + versus;
 
     const from = new Date(c.cheapest_window.start);
     const to = new Date(c.cheapest_window.end);
-    $("answer").textContent =
-      "Power is cheapest between " + utcHM(from) + " and " + utcHM(to) + " UTC.";
+    $("answer").textContent = t("answer", { from: utcHM(from), to: utcHM(to) });
 
     const parts = [];
     if (!sameAsUtc(from)) {
-      parts.push("That is " + localHM(from) + " to " + localHM(to) + " in " + zoneName(from) + ".");
+      parts.push(t("detail_local", { from: localHM(from), to: localHM(to), zone: zoneName(from) }));
     }
     parts.push(
-      "It averages " + fmt(c.cheapest_window.avg) + " " + c.price_label + ", against " + fmt(c.mean) +
-        " over the whole day."
+      t("detail_average", { avg: fmt(c.cheapest_window.avg), label: c.price_label, mean: fmt(c.mean) })
     );
     const pFrom = new Date(c.priciest_window.start);
     const pTo = new Date(c.priciest_window.end);
     parts.push(
-      "Avoid " + utcHM(pFrom) + " to " + utcHM(pTo) + " UTC, which averages " + fmt(c.priciest_window.avg) + "."
+      t("detail_avoid", { from: utcHM(pFrom), to: utcHM(pTo), avg: fmt(c.priciest_window.avg) })
     );
     $("detail").textContent = parts.join(" ");
 
-    $("key-cheap").textContent = "Cheapest " + hoursLabel(c.window_hours);
-    $("key-pricey").textContent = "Priciest " + hoursLabel(c.window_hours);
+    $("key-cheap").textContent = t("key_cheap", { hours: hoursLabel(c.window_hours) });
+    $("key-pricey").textContent = t("key_pricey", { hours: hoursLabel(c.window_hours) });
     plot.setAttribute(
       "aria-label",
-      "Price chart for " + c.zone_name + ". Cheapest " + hoursLabel(c.window_hours) + " are " +
-        utcHM(from) + " to " + utcHM(to) + " UTC. Use the left and right arrow keys to read each hour."
+      t("plot_aria", {
+        zone: zoneName_(c),
+        hours: hoursLabel(c.window_hours),
+        from: utcHM(from),
+        to: utcHM(to),
+      })
     );
   }
 
   function renderBasis() {
     const c = chart;
-    $("chart-title").textContent = "Day-ahead price in " + perWords(c) + ", by hour in UTC";
-    $("foot-note").textContent =
-      "Prices are day-ahead, in " + priceBasis(c) + ". Times are UTC unless a time zone is named. " +
-      "Guidance only, not financial advice.";
-    $("fx-note").textContent = c.fx
-      ? "1 EUR = " + c.fx.rate + " DKK, the fixed central rate the krone is pegged to."
-      : "";
+    $("chart-title").textContent = t("chart_title", { basis: perWords(c) });
+    $("foot-note").textContent = t("foot_note", { basis: priceBasis(c) });
+    $("fx-note").textContent = c.fx ? t("fx_note", { rate: rateFormat.format(c.fx.rate) }) : "";
   }
 
   function render(payload, animate) {
@@ -320,7 +313,7 @@
     const p = pts[i];
     const when = utcHM(p.t) + " UTC" + (sameAsUtc(p.t) ? "" : ", " + localHM(p.t) + " " + zoneName(p.t));
     const kind = windowOf(i);
-    const note = kind === "cheap" ? "In the cheapest window" : kind === "pricey" ? "In the priciest window" : "";
+    const note = kind === "cheap" ? t("tip_cheap") : kind === "pricey" ? t("tip_pricey") : "";
     return { value: fmt(p.price) + " " + chart.price_label, when, note, kind };
   }
 
@@ -396,7 +389,7 @@
     tableMode = !tableMode;
     plot.hidden = tableMode;
     $("table-wrap").hidden = !tableMode;
-    $("view-toggle").textContent = tableMode ? "Show as chart" : "Show as table";
+    $("view-toggle").textContent = t(tableMode ? "show_chart" : "show_table");
   });
 
   let resizeTimer = null;
@@ -417,9 +410,11 @@
   let options = []; // the zones currently listed
   let highlighted = -1;
 
+  // Names come from the page's own translations; the server's label is the fallback.
+  const labelOf = (z) => I18N.zone(z.code, 0) || z.label;
   const zoneLabel = (code) => {
     const found = zones.find((z) => z.code === code);
-    return found ? found.label : "";
+    return found ? labelOf(found) : "";
   };
 
   function closeList() {
@@ -444,10 +439,10 @@
 
   function openList(filter) {
     const needle = filter.trim().toLowerCase();
-    options = zones.filter((z) => z.label.toLowerCase().includes(needle));
+    options = zones.filter((z) => labelOf(z).toLowerCase().includes(needle));
     zoneList.replaceChildren();
     options.forEach((z, i) => {
-      const li = el("li", "combo-option", z.label);
+      const li = el("li", "combo-option", labelOf(z));
       li.id = "zone-opt-" + i;
       li.setAttribute("role", "option");
       li.addEventListener("mousedown", (event) => {
@@ -456,7 +451,7 @@
       });
       zoneList.appendChild(li);
     });
-    if (!options.length) zoneList.appendChild(el("li", "combo-empty", "No matching country"));
+    if (!options.length) zoneList.appendChild(el("li", "combo-empty", t("combo_empty")));
     zoneList.hidden = false;
     zoneInput.setAttribute("aria-expanded", "true");
     highlight(options.length ? 0 : -1);
@@ -513,11 +508,43 @@
     });
   }
 
-  // The written brief's language only matters for the next question, so no price reload.
+  // One choice drives the whole page and the language the brief is written in.
+  function applyLanguage() {
+    document.documentElement.lang = I18N.lang;
+    document.title = t("page_title");
+    const description = document.querySelector('meta[name="description"]');
+    if (description) description.setAttribute("content", t("page_description"));
+    for (const node of document.querySelectorAll("[data-i18n]")) {
+      node.textContent = t(node.dataset.i18n);
+    }
+    for (const node of document.querySelectorAll("[data-i18n-attr]")) {
+      for (const pair of node.dataset.i18nAttr.split(";")) {
+        const [attr, key] = pair.split(":");
+        node.setAttribute(attr, t(key));
+      }
+    }
+    for (const chip of document.querySelectorAll("[data-i18n-q]")) {
+      chip.dataset.q = t(chip.dataset.i18nQ);
+    }
+    $("view-toggle").textContent = t(tableMode ? "show_chart" : "show_table");
+    if (submit.disabled) submit.textContent = t("working");
+    zoneInput.value = zoneLabel(choice.zone);
+    setFormats();
+    updateCount();
+    if (chart) render(chart, false);
+  }
+
+  function setLanguage(code, persist) {
+    I18N.set(code, persist);
+    choice.language = I18N.lang;
+    for (const radio of document.querySelectorAll('input[name="language"]')) {
+      radio.checked = radio.value === I18N.lang;
+    }
+    applyLanguage();
+  }
+
   for (const radio of document.querySelectorAll('input[name="language"]')) {
-    radio.addEventListener("change", () => {
-      choice.language = radio.value;
-    });
+    radio.addEventListener("change", () => setLanguage(radio.value, true));
   }
 
   async function loadZones() {
@@ -547,9 +574,8 @@
     } catch (_) {
       $("chart").hidden = true;
       $("context").textContent = "";
-      $("answer").textContent = "Prices are not available right now.";
-      $("detail").textContent =
-        "The price service did not answer. You can still ask a question below, or try again in a minute.";
+      $("answer").textContent = t("prices_unavailable");
+      $("detail").textContent = t("prices_unavailable_detail");
     }
   }
 
@@ -564,7 +590,7 @@
   const TIMEOUT_MS = 60000;
 
   const updateCount = () => {
-    $("count").textContent = box.value.length + " of " + MAX;
+    $("count").textContent = t("count", { n: box.value.length, max: MAX });
   };
 
   function showError(message) {
@@ -582,24 +608,38 @@
     list.replaceChildren();
     for (const caveat of data.caveats) list.appendChild(el("li", "", caveat));
 
-    const source = data.data_source === "synthetic" ? "synthetic demo data" : "ENTSO-E day-ahead prices";
-    const basis =
+    const source = t(data.data_source === "synthetic" ? "meta_source_synthetic" : "meta_source_real");
+    const basis = t(
       data.zone_source === "selector"
-        ? "the country you chose"
+        ? "meta_basis_selector"
         : data.zone_source === "question"
-          ? "the country named in your question"
-          : "the default country, as none was chosen or named";
-    const prices = data.chart ? "; the chart is in " + priceBasis(data.chart) : "";
-    $("meta").textContent =
-      "Based on " + source + " for " + data.zone + " (" + basis + "), a " + data.window_hours +
-      "-hour window, times in UTC. Figures in the written brief are in " + data.brief_unit + prices +
-      ". Reference " + data.request_id + ".";
+          ? "meta_basis_question"
+          : "meta_basis_default"
+    );
+    const prices = data.chart ? t("meta_prices", { basis: priceBasis(data.chart) }) : "";
+    $("meta").textContent = t("meta", {
+      source,
+      zone: I18N.zone(data.zone, 0) || data.zone,
+      basis,
+      hours: data.window_hours,
+      unit: data.brief_unit,
+      prices,
+      id: data.request_id,
+    });
 
     result.hidden = false;
     result.focus();
 
     // keep the chart in step with the window the brief talked about
     if (data.chart) render(data.chart, false);
+  }
+
+  // The server sends a stable code with each error; the page shows its own text for it, in the
+  // chosen language, and falls back to the server's English message for a code it does not know.
+  function errorText(body) {
+    const code = body && body.code;
+    if (code && STRINGS.en["err_" + code]) return t("err_" + code);
+    return (body && body.error) || t("err_error");
   }
 
   async function ask(question) {
@@ -627,10 +667,10 @@
       if (response.ok && body) {
         showResult(body);
       } else {
-        showError((body && body.error) || "Something went wrong. Try again later.");
+        showError(errorText(body));
       }
     } catch (_) {
-      showError("Could not reach the service. Check your connection and try again.");
+      showError(t("network_error"));
     } finally {
       clearTimeout(timer);
     }
@@ -640,15 +680,15 @@
     event.preventDefault();
     const question = box.value.trim();
     if (!question) {
-      showError("Type a question first.");
+      showError(t("empty_question"));
       box.focus();
       return;
     }
     submit.disabled = true;
-    submit.textContent = "Working";
+    submit.textContent = t("working");
     await ask(question);
     submit.disabled = false;
-    submit.textContent = "Get my brief";
+    submit.textContent = t("get_brief");
   });
 
   box.addEventListener("input", updateCount);
@@ -661,7 +701,9 @@
     });
   }
 
-  updateCount();
-  loadZones();
+  setLanguage(I18N.initial(), false);
+  loadZones().then(() => {
+    zoneInput.value = zoneLabel(choice.zone);
+  });
   loadPrices();
 })();

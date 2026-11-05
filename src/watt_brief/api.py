@@ -28,6 +28,7 @@ from watt_brief.chart import ZONE_LABELS, chart_payload
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES
 from watt_brief.errors import BriefError, GuardRejected
+from watt_brief.guards import MESSAGES as GUARD_MESSAGES
 from watt_brief.history import PriceHistory
 from watt_brief.limits import AbuseTracker, KillSwitch, RateLimiter, SpendTracker
 from watt_brief.llm import Completion, LLMClient, LLMError
@@ -282,7 +283,8 @@ def create_app(
         except GuardRejected as exc:
             metrics.guard_rejections.labels(exc.stage, exc.reason).inc()
             abuse.record_rejection(key)
-            return finish("rejected", 422, {"error": str(exc), "code": exc.reason}, started)
+            code = exc.reason if exc.reason in GUARD_MESSAGES else "unsafe_output"
+            return finish("rejected", 422, {"error": str(exc), "code": code}, started)
         except NoDataError as exc:
             return finish("no_data", 422, {"error": str(exc), "code": exc.code}, started)
         except (BriefError, LLMError):

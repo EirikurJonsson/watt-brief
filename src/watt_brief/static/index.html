@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>watt-brief: when is power cheap?</title>
-  <meta name="description" content="Day-ahead electricity prices for six European markets, with a plain answer on when to run your heat pump, charger or washing machine.">
+  <meta name="description" content="Day-ahead electricity prices for European markets, with a plain answer on when to run your heat pump, charger or washing machine.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="watt-brief">
   <meta property="og:url" content="https://watt-brief.cpa-intel.tech/">
   <meta property="og:title" content="watt-brief: when is power cheap?">
-  <meta property="og:description" content="Day-ahead electricity prices for six European markets, with a plain answer on when to run your heat pump, charger or washing machine.">
+  <meta property="og:description" content="Day-ahead electricity prices for European markets, with a plain answer on when to run your heat pump, charger or washing machine.">
   <meta property="og:image" content="https://watt-brief.cpa-intel.tech/static/og.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -19,46 +19,49 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/static/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/i18n.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="wrap top">
     <a class="brand" href="/">watt-brief</a>
-    <a class="top-link" href="https://github.com/EirikurJonsson/watt-brief">Source and evals</a>
+    <a class="top-link" href="https://github.com/EirikurJonsson/watt-brief" data-i18n="source_link">Source and evals</a>
   </header>
 
   <main class="wrap">
     <section class="hero" aria-labelledby="answer">
       <div class="controls">
         <div class="field combo">
-          <label for="zone-input">Country</label>
+          <label for="zone-input" data-i18n="country">Country</label>
           <input id="zone-input" type="text" role="combobox" autocomplete="off" spellcheck="false"
                  aria-autocomplete="list" aria-expanded="false" aria-controls="zone-list"
-                 placeholder="Type to filter" disabled>
-          <ul id="zone-list" class="combo-list" role="listbox" aria-label="Countries" hidden></ul>
+                 placeholder="Type to filter" data-i18n-attr="placeholder:country_placeholder" disabled>
+          <ul id="zone-list" class="combo-list" role="listbox" aria-label="Countries" data-i18n-attr="aria-label:countries" hidden></ul>
         </div>
         <fieldset class="field seg">
-          <legend>Unit</legend>
+          <legend data-i18n="unit">Unit</legend>
           <label><input type="radio" name="unit" value="MWh" checked> MWh</label>
           <label><input type="radio" name="unit" value="kWh"> kWh</label>
         </fieldset>
         <fieldset class="field seg">
-          <legend>Currency</legend>
+          <legend data-i18n="currency">Currency</legend>
           <label><input type="radio" name="currency" value="EUR" checked> EUR</label>
           <label><input type="radio" name="currency" value="DKK"> DKK</label>
         </fieldset>
         <fieldset class="field seg">
-          <legend>Brief language</legend>
+          <legend data-i18n="language">Language</legend>
           <label><input type="radio" name="language" value="en" checked> English</label>
           <label><input type="radio" name="language" value="da"> Dansk</label>
+          <label><input type="radio" name="language" value="de"> Deutsch</label>
+          <label><input type="radio" name="language" value="fr"> Français</label>
         </fieldset>
       </div>
-      <p class="fx-note">Clear the country field to let your question choose the country.</p>
+      <p class="fx-note" data-i18n="clear_hint">Clear the country field to let your question choose the country.</p>
       <p id="fx-note" class="fx-note" aria-live="polite"></p>
 
-      <p id="context" class="context">Loading prices.</p>
+      <p id="context" class="context" data-i18n="loading_context">Loading prices.</p>
       <div class="hero-head">
-        <h1 id="answer" class="answer">Checking today's prices.</h1>
+        <h1 id="answer" class="answer" data-i18n="loading_answer">Checking today's prices.</h1>
         <p id="detail" class="detail"></p>
       </div>
 
@@ -66,7 +69,7 @@
         <figcaption id="chart-title" class="chart-title">Day-ahead price in EUR per MWh, by hour in UTC</figcaption>
 
         <div class="plot" id="plot" tabindex="0" role="group"
-             aria-label="Price chart. Use the left and right arrow keys to read each hour.">
+             aria-label="Price chart. Use the left and right arrow keys to read each hour." data-i18n-attr="aria-label:chart_aria_default">
           <div class="brackets" id="brackets"></div>
           <div class="yaxis" id="yaxis" aria-hidden="true"></div>
           <div class="area" id="area" aria-hidden="true"></div>
@@ -77,7 +80,7 @@
           <table class="data" id="data-table">
             <caption id="table-caption">Day-ahead prices in EUR per MWh</caption>
             <thead>
-              <tr><th scope="col">Time (UTC)</th><th scope="col" id="local-col">Your time</th><th scope="col" id="price-col">Price (EUR/MWh)</th><th scope="col">Note</th></tr>
+              <tr><th scope="col" data-i18n="col_utc">Time (UTC)</th><th scope="col" id="local-col">Your time</th><th scope="col" id="price-col">Price (EUR/MWh)</th><th scope="col" data-i18n="col_note">Note</th></tr>
             </thead>
             <tbody id="table-body"></tbody>
           </table>
@@ -88,29 +91,30 @@
             <li><span class="swatch swatch-cheap"></span><span id="key-cheap">Cheapest 3 hours</span></li>
             <li><span class="swatch swatch-pricey"></span><span id="key-pricey">Priciest 3 hours</span></li>
           </ul>
-          <button type="button" class="link" id="view-toggle">Show as table</button>
+          <button type="button" class="link" id="view-toggle" data-i18n="show_table">Show as table</button>
         </div>
         <p class="sr-only" id="live" aria-live="polite"></p>
       </figure>
     </section>
 
     <section class="ask" aria-labelledby="ask-title">
-      <h2 id="ask-title">Ask about your own situation</h2>
-      <p class="ask-lead">Tell us what you need to run and for how long. You get a short brief that ends in a decision.</p>
+      <h2 id="ask-title" data-i18n="ask_title">Ask about your own situation</h2>
+      <p class="ask-lead" data-i18n="ask_lead">Tell us what you need to run and for how long. You get a short brief that ends in a decision.</p>
 
       <form id="ask" novalidate>
-        <label class="sr-only" for="question">Your question</label>
+        <label class="sr-only" for="question" data-i18n="your_question">Your question</label>
         <textarea id="question" name="question" rows="2" maxlength="500" required
-          placeholder="I need 3 hours for my heat pump tomorrow. When should it run?"></textarea>
+          placeholder="I need 3 hours for my heat pump tomorrow. When should it run?"
+          data-i18n-attr="placeholder:question_placeholder"></textarea>
         <div class="actions">
-          <button type="submit" class="primary" id="submit">Get my brief</button>
+          <button type="submit" class="primary" id="submit" data-i18n="get_brief">Get my brief</button>
           <span id="count" class="count">0 of 500</span>
         </div>
         <p class="try">
-          Or try:
-          <button type="button" class="link chip" data-q="I need 3 hours of power tomorrow in Germany. When should I run my heat pump?">heat pump, 3 hours</button>
-          <button type="button" class="link chip" data-q="When is electricity most expensive tomorrow, so I can avoid it?">the expensive hours</button>
-          <button type="button" class="link chip" data-q="Are there negative prices tomorrow, and when?">negative prices</button>
+          <span data-i18n="or_try">Or try:</span>
+          <button type="button" class="link chip" data-i18n="chip1" data-i18n-q="chip1_q" data-q="I need 3 hours of power tomorrow. When should I run my heat pump?">heat pump, 3 hours</button>
+          <button type="button" class="link chip" data-i18n="chip2" data-i18n-q="chip2_q" data-q="When is electricity most expensive tomorrow, so I can avoid it?">the expensive hours</button>
+          <button type="button" class="link chip" data-i18n="chip3" data-i18n-q="chip3_q" data-q="Are there negative prices tomorrow, and when?">negative prices</button>
         </p>
       </form>
 
@@ -118,9 +122,9 @@
 
       <article id="result" class="result" tabindex="-1" aria-live="polite" hidden>
         <h3 id="rec" class="rec"></h3>
-        <h4>Why</h4>
+        <h4 data-i18n="why">Why</h4>
         <p id="reason"></p>
-        <h4>Caveats</h4>
+        <h4 data-i18n="caveats">Caveats</h4>
         <ul id="caveats"></ul>
         <p id="meta" class="meta"></p>
       </article>
@@ -130,7 +134,7 @@
   <footer class="wrap">
     <div class="foot">
       <p id="foot-note">Prices are day-ahead, in EUR per MWh. Times are UTC unless a time zone is named. Guidance only, not financial advice.</p>
-      <p><a href="https://github.com/EirikurJonsson/watt-brief">How it works, the decisions behind it, and the eval results</a>. <a href="/privacy">Privacy</a>.</p>
+      <p><a href="https://github.com/EirikurJonsson/watt-brief" data-i18n="foot_links">How it works, the decisions behind it, and the eval results</a>. <a href="/privacy" data-i18n="privacy">Privacy</a>.</p>
     </div>
   </footer>
 </body>
