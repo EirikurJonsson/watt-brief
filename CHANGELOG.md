@@ -14,5 +14,7 @@ Notable changes, newest first. Versions are git tags; the running commit is show
   (`python -m watt_brief.backup`), property-based tests for the parser and guards.
 - Phone layout: the answer and chart come first, the choices below; the browser check now runs in
   CI. Nightly live evals with pass thresholds (`--gate`).
+- Graceful shutdown verified by test (in-flight request survives SIGTERM); compose fragment
+  gets `stop_grace_period: 30s`.
 - CI: dependency audit, image build attestations (provenance and SBOM), deploy that checks the
   running commit, rolls back on failure and can smoke test the live site.

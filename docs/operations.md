@@ -77,7 +77,7 @@ which is safe while the service runs:
 docker exec watt_brief python -m watt_brief.backup            # writes data/backups/, keeps 14
 ```
 
-Run it from cron on the host (daily), then copy `watt-brief-data/backups/` to another disk or
+Run it from cron on the host (daily), for example `15 4 * * * docker exec watt_brief python -m watt_brief.backup`, then copy `watt-brief-data/backups/` to another disk or
 machine. Same-disk copies do not survive a disk failure.
 
 Restore drill (do it once, for real, so the steps are known to work):
@@ -90,6 +90,14 @@ Restore drill (do it once, for real, so the steps are known to work):
 
 If `spend.sqlite` is lost, today's counted spend restarts at zero, so check the provider's own
 dashboard before leaving the service unattended.
+
+## Shutdown
+
+On SIGTERM (`docker stop`, a deploy) the service stops taking new connections, lets in-flight
+requests finish, then closes its databases. `tests/test_shutdown.py` kills a live service during a
+slow request and checks the answer still arrives. Docker's default grace period is 10 s, shorter
+than a slow brief, so the compose fragment sets `stop_grace_period: 30s`: merge that line into the
+server's compose file.
 
 ## Rollback
 

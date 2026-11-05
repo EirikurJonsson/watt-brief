@@ -20,6 +20,8 @@ services:
     image: ghcr.io/eirikurjonsson/watt-brief:latest
     container_name: watt_brief
     restart: always
+    # Docker kills after 10 s by default; a brief can take longer. Let in-flight requests finish.
+    stop_grace_period: 30s
     user: "1000:1000"
     read_only: true
     tmpfs:
