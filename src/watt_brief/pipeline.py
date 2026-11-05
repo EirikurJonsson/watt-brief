@@ -83,6 +83,7 @@ def run_pipeline(
     use_planner: bool = False,
     use_critic: bool = False,
     zone: str | None = None,
+    language: str = "en",
     input_guard: bool = True,
     output_guard: bool = True,
 ) -> PipelineResult:
@@ -118,7 +119,13 @@ def run_pipeline(
     facts = get_facts(zone, plan.window_hours)
 
     brief, completion = write_brief(
-        client, settings, question, facts, input_guard=False, output_guard=output_guard
+        client,
+        settings,
+        question,
+        facts,
+        input_guard=False,
+        output_guard=output_guard,
+        language=language,
     )
     steps.append(_step("analyst", settings.model_analyst, completion))
     result = PipelineResult(brief=brief, facts=facts, plan=plan, steps=steps)
@@ -143,6 +150,7 @@ def run_pipeline(
                     input_guard=False,
                     output_guard=output_guard,
                     note=note,
+                    language=language,
                 )
             except BriefError as exc:
                 # The first draft already passed the guards. Keep it.

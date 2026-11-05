@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from watt_brief.alerts import AlertManager
+from watt_brief.brief import LANGUAGES
 from watt_brief.chart import ZONE_LABELS, chart_payload
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES
@@ -71,6 +72,14 @@ class BriefRequest(BaseModel):
     zone: str | None = None
     unit: str = "MWh"
     currency: str = "EUR"
+    language: str = "en"
+
+    @field_validator("language")
+    @classmethod
+    def _language_known(cls, value: str) -> str:
+        if value not in LANGUAGES:
+            raise ValueError("unknown language")
+        return value
 
     @field_validator("zone")
     @classmethod
@@ -242,6 +251,7 @@ def create_app(
                 use_planner=settings.use_planner,
                 use_critic=settings.use_critic,
                 zone=payload.zone,
+                language=payload.language,
             )
         except GuardRejected as exc:
             metrics.guard_rejections.labels(exc.stage, exc.reason).inc()
@@ -272,6 +282,7 @@ def create_app(
             "data_source": data_source,
             # The written brief quotes the facts, which stay in EUR/MWh. Only the chart converts.
             "brief_unit": "EUR/MWh",
+            "language": payload.language,
             "request_id": request_id,
         }
         try:

@@ -409,7 +409,7 @@
 
   // ---------- choices: country, unit, currency ----------
 
-  const choice = { zone: null, unit: "MWh", currency: "EUR" };
+  const choice = { zone: null, unit: "MWh", currency: "EUR", language: "en" };
   let zones = []; // [{ code, label }] from /api/zones
 
   const zoneInput = $("zone-input");
@@ -513,6 +513,13 @@
     });
   }
 
+  // The written brief's language only matters for the next question, so no price reload.
+  for (const radio of document.querySelectorAll('input[name="language"]')) {
+    radio.addEventListener("change", () => {
+      choice.language = radio.value;
+    });
+  }
+
   async function loadZones() {
     try {
       const response = await fetch("/api/zones");
@@ -606,6 +613,7 @@
           question,
           unit: choice.unit,
           currency: choice.currency,
+          language: choice.language,
           ...(choice.zone ? { zone: choice.zone } : {}),
         }),
         signal: controller.signal,

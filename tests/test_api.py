@@ -512,3 +512,61 @@ def test_brief_chart_follows_unit_and_currency(tmp_path):
 def test_brief_rejects_unknown_zone_unit_or_currency(tmp_path, extra):
     with make_client(tmp_path) as client:
         assert client.post("/api/brief", json={**Q, **extra}).status_code == 422
+
+
+DANISH = {
+    "recommendation": "Kør fra 10:00 til 13:00 UTC til en gennemsnitspris på 3,0 EUR/MWh.",
+    "reasoning": "Dagens gennemsnit er 69,25 EUR/MWh.",
+    "caveats": ["Kun day-ahead-priser."],
+}
+
+
+def language_client(tmp_path, answer):
+    prompts = []
+
+    def handler(req: httpx.Request):
+        body = json.loads(req.content)
+        prompts.append(body["messages"][0]["content"])
+        content = json.dumps(PLAN if body["model"] == "planner-m" else answer)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": content}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "estimated_cost": 0.001},
+            },
+        )
+
+    return make_client(tmp_path, handler), prompts
+
+
+def test_danish_brief_asks_for_danish_and_passes_the_grounding_guard(tmp_path):
+    client, prompts = language_client(tmp_path, DANISH)
+    with client:
+        r = client.post("/api/brief", json={**Q, "language": "da"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["language"] == "da" and body["recommendation"].startswith("Kør fra")
+    analyst_prompt = prompts[-1]
+    assert "in Danish" in analyst_prompt and "Reply with one JSON object" in analyst_prompt
+
+
+def test_english_is_the_default_and_the_prompt_is_unchanged(tmp_path):
+    from watt_brief.brief import SYSTEM_PROMPT
+
+    client, prompts = language_client(tmp_path, GOOD)
+    with client:
+        body = client.post("/api/brief", json=Q).json()
+    assert body["language"] == "en" and prompts[-1] == SYSTEM_PROMPT
+
+
+def test_a_danish_brief_still_cannot_invent_a_number(tmp_path):
+    invented = {**DANISH, "reasoning": "Dagens gennemsnit er 12,34 EUR/MWh."}
+    client, _ = language_client(tmp_path, invented)
+    with client:
+        r = client.post("/api/brief", json={**Q, "language": "da"})
+    assert r.status_code != 200 and "12" not in r.text
+
+
+def test_unknown_language_is_rejected(tmp_path):
+    with make_client(tmp_path) as client:
+        assert client.post("/api/brief", json={**Q, "language": "xx"}).status_code == 422

@@ -37,6 +37,24 @@ Rules:
 """
 
 
+# Languages the brief can be written in. The facts, the guards and the unit stay the same.
+LANGUAGES = {"en": "English", "da": "Danish"}
+
+LANGUAGE_RULE = """
+- Write "recommendation", "reasoning" and "caveats" in {name}. Keep the JSON keys in English.
+- Copy numbers and times exactly as they are in FACTS: times as HH:MM with a colon and UTC
+  (10:00 UTC), no thousands separators, and keep unit names as they are (EUR/MWh). A decimal
+  comma is fine."""
+
+
+def system_prompt(language: str = "en") -> str:
+    if language == "en":
+        return SYSTEM_PROMPT
+    marker = "- Reply with one JSON object"
+    rule = LANGUAGE_RULE.format(name=LANGUAGES[language]).lstrip("\n")
+    return SYSTEM_PROMPT.replace(marker, rule + "\n" + marker, 1)
+
+
 class Brief(BaseModel):
     recommendation: str = Field(min_length=1, max_length=400)
     reasoning: str = Field(min_length=1, max_length=900)
@@ -92,6 +110,7 @@ def write_brief(
     input_guard: bool = True,
     output_guard: bool = True,
     note: str = "",
+    language: str = "en",
 ) -> tuple[Brief, Completion]:
     """Guards default on. The switches exist so the evals can measure each layer alone."""
     try:
@@ -111,13 +130,15 @@ def write_brief(
         )
         raise
 
+    if language not in LANGUAGES:
+        raise BriefError("unsupported language")
     correction = note
     completions: list[Completion] = []
     for attempt in (1, 2):
         completion = client.complete(
             step="analyst",
             model=settings.model_analyst,
-            system=SYSTEM_PROMPT,
+            system=system_prompt(language),
             user=build_user_message(question, facts, correction),
         )
         completions.append(completion)
