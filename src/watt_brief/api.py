@@ -73,6 +73,11 @@ MESSAGES = {
 }
 
 
+def error_body(code: str) -> dict:
+    """The English message for API users, plus a stable code the page translates."""
+    return {"error": MESSAGES[code], "code": code}
+
+
 class BriefRequest(BaseModel):
     question: str = Field(max_length=2000)
     # Choices from the page. A zone given here wins over a country named in the question.
@@ -237,33 +242,31 @@ def create_app(
         key = client_key(request)
 
         if kill.active():
-            return finish("killed", 503, {"error": MESSAGES["killed"]}, started)
+            return finish("killed", 503, error_body("killed"), started)
         if abuse.is_banned(key):
-            return finish("banned", 429, {"error": MESSAGES["banned"]}, started, 3600)
+            return finish("banned", 429, error_body("banned"), started, 3600)
         allowed, retry_after = limiter.check(key)
         if not allowed:
-            return finish(
-                "rate_limited", 429, {"error": MESSAGES["rate_limited"]}, started, retry_after
-            )
+            return finish("rate_limited", 429, error_body("rate_limited"), started, retry_after)
         if spend.today() >= settings.daily_spend_cap_usd:
-            return finish("budget", 503, {"error": MESSAGES["budget"]}, started, 3600)
+            return finish("budget", 503, error_body("budget"), started, 3600)
 
         # Requiring JSON forces a CORS preflight, which another website cannot pass, so a
         # visitor's browser cannot be tricked into spending our budget with a plain form post.
         if not request.headers.get("content-type", "").lower().startswith("application/json"):
-            return finish("rejected", 415, {"error": MESSAGES["bad_type"]}, started)
+            return finish("rejected", 415, error_body("bad_type"), started)
 
         raw = await read_limited(request)
         if raw is None:
-            return finish("rejected", 413, {"error": MESSAGES["too_large"]}, started)
+            return finish("rejected", 413, error_body("too_large"), started)
         try:
             payload = BriefRequest.model_validate(json.loads(raw))
         except (ValueError, ValidationError):
             abuse.record_rejection(key)
-            return finish("rejected", 422, {"error": MESSAGES["bad_request"]}, started)
+            return finish("rejected", 422, error_body("bad_request"), started)
 
         if not slots.acquire(blocking=False):
-            return finish("busy", 503, {"error": MESSAGES["busy"]}, started, 5)
+            return finish("busy", 503, error_body("busy"), started, 5)
         try:
             result = await run_in_threadpool(
                 run_pipeline,
@@ -279,15 +282,15 @@ def create_app(
         except GuardRejected as exc:
             metrics.guard_rejections.labels(exc.stage, exc.reason).inc()
             abuse.record_rejection(key)
-            return finish("rejected", 422, {"error": str(exc)}, started)
+            return finish("rejected", 422, {"error": str(exc), "code": exc.reason}, started)
         except NoDataError as exc:
-            return finish("no_data", 422, {"error": str(exc)}, started)
+            return finish("no_data", 422, {"error": str(exc), "code": exc.code}, started)
         except (BriefError, LLMError):
-            return finish("error", 502, {"error": MESSAGES["model_error"]}, started)
+            return finish("error", 502, error_body("model_error"), started)
         except Exception as exc:  # noqa: BLE001 - last resort, must not leak
             # Type only: the message could contain request data.
             log(logger, "unhandled_error", kind=type(exc).__name__)
-            return finish("error", 500, {"error": MESSAGES["error"]}, started)
+            return finish("error", 500, error_body("error"), started)
         finally:
             slots.release()
 
@@ -330,21 +333,23 @@ def create_app(
         allowed, retry_after = price_limiter.check(client_key(request))
         if not allowed:
             return JSONResponse(
-                {"error": MESSAGES["rate_limited"]},
+                error_body("rate_limited"),
                 status_code=429,
                 headers={"Retry-After": str(retry_after)},
             )
         zone = zone or settings.effective_default_zone
         if not (zone in ZONES and 1 <= hours <= 6 and unit in UNITS and currency in CURRENCIES):
             return JSONResponse(
-                {"error": "Unknown zone, window, unit or currency."}, status_code=422
+                {"error": "Unknown zone, window, unit or currency.", "code": "bad_query"},
+                status_code=422,
             )
         try:
             series = series_source(zone)
             display = make_display(unit, currency)
             payload = chart_payload(series, hours, data_source, previous_day(series), display)
         except (NoDataError, ValueError) as exc:
-            return JSONResponse({"error": str(exc)}, status_code=404)
+            code = exc.code if isinstance(exc, NoDataError) else "no_data"
+            return JSONResponse({"error": str(exc), "code": code}, status_code=404)
         return JSONResponse(payload, headers={"Cache-Control": "public, max-age=300"})
 
     @app.get("/api/zones")

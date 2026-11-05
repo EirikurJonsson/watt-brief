@@ -50,7 +50,7 @@ def fixture_series_source() -> SeriesSource:
 
     def get(zone: str) -> PriceSeries:
         if zone != "DE_LU":
-            raise NoDataError("I don't have price data for that zone yet.")
+            raise NoDataError("I don't have price data for that zone yet.", "zone_unknown")
         return series
 
     return get
@@ -139,7 +139,7 @@ class EntsoeSeriesSource:
 
     def __call__(self, zone: str) -> PriceSeries:
         if zone not in self._zone_locks:
-            raise NoDataError("I don't have price data for that zone yet.")
+            raise NoDataError("I don't have price data for that zone yet.", "zone_unknown")
         now = self._clock()
         tomorrow, today = _delivery_days(now)
         self._forget_before(today[0])
@@ -161,7 +161,7 @@ class EntsoeSeriesSource:
                 self._tomorrow_missing.discard(zone)
         if series is None:
             log(logger, "entsoe_unavailable", zone=zone)
-            raise NoDataError("Price data is not available right now.")
+            raise NoDataError("Price data is not available right now.", "no_prices")
         return series
 
     def _forget_before(self, day_start: datetime) -> None:

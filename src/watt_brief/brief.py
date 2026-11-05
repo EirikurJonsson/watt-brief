@@ -38,7 +38,7 @@ Rules:
 
 
 # Languages the brief can be written in. The facts, the guards and the unit stay the same.
-LANGUAGES = {"en": "English", "da": "Danish"}
+LANGUAGES = {"en": "English", "da": "Danish", "de": "German", "fr": "French"}
 
 LANGUAGE_RULE = """
 - Write "recommendation", "reasoning" and "caveats" in {name}. Keep the JSON keys in English.

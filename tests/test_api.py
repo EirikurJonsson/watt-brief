@@ -593,3 +593,28 @@ def test_prices_without_a_zone_use_the_default_zone(tmp_path):
 def test_an_unknown_default_zone_stops_the_app_from_starting(tmp_path):
     with pytest.raises(ValueError, match="DEFAULT_ZONE"):
         create_app(make_settings(tmp_path, default_zone="XX"))
+
+
+@pytest.mark.parametrize(
+    ("language", "name"), [("de", "German"), ("fr", "French"), ("da", "Danish")]
+)
+def test_each_brief_language_is_requested_by_name(tmp_path, language, name):
+    client, prompts = language_client(tmp_path, GOOD)
+    with client:
+        body = client.post("/api/brief", json={**Q, "language": language}).json()
+    assert body["language"] == language and f"in {name}" in prompts[-1]
+
+
+def test_errors_carry_a_stable_code_for_the_page_to_translate(tmp_path):
+    with make_client(tmp_path) as client:
+        off_topic = client.post("/api/brief", json={"question": "Tell me a joke"})
+        no_zone = client.get("/api/prices?zone=XX")
+        bad_json = client.post(
+            "/api/brief", content="{", headers={"content-type": "application/json"}
+        )
+        denmark = client.post("/api/brief", json={"question": "Cheapest hours in Denmark?"})
+    assert off_topic.json()["code"] == "off_topic"
+    assert no_zone.json()["code"] == "bad_query"
+    assert bad_json.json()["code"] == "bad_request"
+    assert denmark.json()["code"] == "denmark_ambiguous"
+    assert "DK1" in denmark.json()["error"]  # the English text stays for API users

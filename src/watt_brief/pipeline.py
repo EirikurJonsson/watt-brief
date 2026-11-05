@@ -37,7 +37,11 @@ FactsSource = Callable[[str, int], PriceFacts]
 
 
 class NoDataError(BriefError):
-    pass
+    """No prices to answer with. `code` is stable, so a page can show its own translation."""
+
+    def __init__(self, message: str, code: str = "no_data"):
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -110,9 +114,11 @@ def run_pipeline(
     # A zone chosen in the selector wins over any country named in the question.
     if zone is None:
         if plan.zone in (UNSPECIFIED, UNSUPPORTED) and names_denmark_only(question):
-            raise NoDataError(DENMARK_AMBIGUOUS)
+            raise NoDataError(DENMARK_AMBIGUOUS, "denmark_ambiguous")
         if plan.zone == UNSUPPORTED:
-            raise NoDataError(f"I only cover {', '.join(ZONES)} day-ahead prices for now.")
+            raise NoDataError(
+                f"I only cover {', '.join(ZONES)} day-ahead prices for now.", "zone_unsupported"
+            )
         zone = settings.effective_default_zone if plan.zone == UNSPECIFIED else plan.zone
     facts = get_facts(zone, plan.window_hours)
 
