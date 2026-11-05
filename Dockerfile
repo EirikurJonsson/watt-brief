@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM python:3.13-slim AS build
+FROM python:3.15-slim AS build
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
     UV_PROJECT_ENVIRONMENT=/opt/venv
 RUN pip install --no-cache-dir uv==0.12.9
@@ -11,7 +11,7 @@ COPY src ./src
 COPY tests/fixtures ./tests/fixtures
 RUN uv sync --frozen --no-dev
 
-FROM python:3.13-slim
+FROM python:3.15-slim
 # Fixed uid so the bind-mounted data directory on the host can be owned by the same user.
 RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin app \
     && mkdir -p /app/data && chown app:app /app/data
