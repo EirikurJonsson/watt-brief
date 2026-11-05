@@ -290,9 +290,30 @@ class PlannerCase:
     zone: str
     window_hours: int | None = None
     intent: str | None = None
+    # Checked only when `check_hours` is set: the (from, to) local hours the plan must carry,
+    # or None when the question limits no hours and the plan must carry none.
+    hours: tuple[int, int] | None = None
+    check_hours: bool = False
 
 
 PLANNER_CASES = [
+    PlannerCase(
+        "p-hours-da",
+        "jeg starter arbejdet kl0800 til 1600, hvornar det i mellem skal jeg lade min EV i Aarhus",
+        "DK1",
+        hours=(8, 16),
+        check_hours=True,
+    ),
+    PlannerCase(
+        "p-hours-en",
+        "I'm only home between 17 and 23 in Berlin, when should I run the washing machine?",
+        "DE_LU",
+        hours=(17, 23),
+        check_hours=True,
+    ),
+    PlannerCase(
+        "p-hours-none", "Cheapest 2 hours to charge in Copenhagen?", "DK2", 2, check_hours=True
+    ),
     PlannerCase("p-de", "When should my heat pump run in Germany tomorrow?", "DE_LU", None, None),
     PlannerCase("p-fr", "I live in France. Cheapest 2 hours to charge my EV?", "FR", 2, None),
     PlannerCase("p-nl", "Dutch electricity: when should I run the dishwasher?", "NL", None, None),

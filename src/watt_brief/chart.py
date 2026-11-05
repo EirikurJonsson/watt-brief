@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from watt_brief.analysis import analyse
+from watt_brief.analysis import Availability, analyse
 from watt_brief.entsoe import PriceSeries
 from watt_brief.units import EUR_PER_MWH, Display
 
@@ -63,9 +63,10 @@ def chart_payload(
     previous: PriceSeries | None = None,
     display: Display = EUR_PER_MWH,
     now: datetime | None = None,
+    availability: Availability | None = None,
 ) -> dict:
     """Series plus the two highlighted windows, computed by the same code the brief uses."""
-    facts = analyse(series, window_hours=window_hours, now=now)
+    facts = analyse(series, window_hours=window_hours, now=now, availability=availability)
     return {
         "zone": series.zone,
         "zone_name": ZONE_NAMES.get(series.zone, series.zone),

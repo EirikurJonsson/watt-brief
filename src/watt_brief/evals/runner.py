@@ -208,6 +208,14 @@ def run_planner_evals(repeats: int, max_cost: float, client: LLMClient, settings
                 wrong.append(f"window {plan.window_hours} != {case.window_hours}")
             if case.intent is not None and plan.intent != case.intent:
                 wrong.append(f"intent {plan.intent} != {case.intent}")
+            if case.check_hours:
+                got = (
+                    (plan.available_from, plan.available_to)
+                    if plan.available_from is not None
+                    else None
+                )
+                if got != case.hours:
+                    wrong.append(f"hours {got} != {case.hours}")
             if fallback:
                 wrong.append("fell back to default plan")
             rows.append({"id": case.id, "passed": not wrong, "wrong": wrong})

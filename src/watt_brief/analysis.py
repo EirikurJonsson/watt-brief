@@ -1,9 +1,10 @@
 """Deterministic price statistics. Every number in a brief comes from here, not from the model."""
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
-from watt_brief.entsoe import PriceSeries
+from watt_brief.entsoe import ZONE_TIMEZONES, PriceSeries
 
 
 @dataclass(frozen=True)
@@ -11,6 +12,23 @@ class Window:
     start_utc: str
     end_utc: str
     avg_eur_per_mwh: float
+
+
+@dataclass(frozen=True)
+class Availability:
+    """The hours of the day the user can use power, as local clock hours in the zone's country.
+
+    `to_hour` of 24 means midnight. `from_hour` greater than `to_hour` wraps past midnight
+    (22 to 6 is the night).
+    """
+
+    from_hour: int
+    to_hour: int
+
+    def allows(self, local: datetime) -> bool:
+        minute = local.hour * 60 + local.minute
+        start, end = self.from_hour * 60, self.to_hour * 60
+        return start <= minute < end if start < end else minute >= start or minute < end
 
 
 @dataclass(frozen=True)
@@ -35,6 +53,11 @@ class PriceFacts:
     # that start at the current slot or later (nobody can use 03:00 at 14:00). None means every
     # window was considered: tomorrow's prices, or a day with no usable window left.
     windows_from_utc: str | None = None
+    # Set when the user limited the hours they can use power. The hours are local clock times and
+    # their UTC equivalents; `fits_availability` is False when no window fits inside them and the
+    # windows above are therefore for the whole day.
+    availability: dict | None = None
+    fits_availability: bool | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -68,12 +91,45 @@ def _still_usable(
     return (usable, cutoff) if usable else (windows, None)
 
 
-def analyse(series: PriceSeries, window_hours: int = 3, now: datetime | None = None) -> PriceFacts:
+def _availability_facts(series: PriceSeries, tz: ZoneInfo, hours: Availability) -> dict:
+    """The user's local hours and the same hours in UTC, on the day the prices are mostly for."""
+    day = series.points[len(series.points) // 2].start.astimezone(tz).date()
+
+    def clock(hour: int) -> tuple[str, str]:
+        base = datetime.combine(day, time(0), tzinfo=tz) + timedelta(hours=hour)
+        return base.strftime("%H:%M"), base.astimezone(ZoneInfo("UTC")).strftime("%H:%M")
+
+    local_from, utc_from = clock(hours.from_hour)
+    local_to, utc_to = clock(hours.to_hour)
+    return {
+        "local_from": local_from,
+        "local_to": local_to,
+        "utc_from": utc_from,
+        "utc_to": utc_to,
+    }
+
+
+def analyse(
+    series: PriceSeries,
+    window_hours: int = 3,
+    now: datetime | None = None,
+    availability: Availability | None = None,
+) -> PriceFacts:
     if window_hours * 60 % series.resolution_minutes:
         raise ValueError("window must be a whole number of price slots")
     windows = _windows(series, window_hours)
     if not windows:
         raise ValueError("series is shorter than the window")
+    fits = None
+    availability_facts = None
+    if availability is not None:
+        tz = ZoneInfo(ZONE_TIMEZONES[series.zone])
+        allowed = [availability.allows(p.start.astimezone(tz)) for p in series.points]
+        per_window = window_hours * 60 // series.resolution_minutes
+        inside = [w for i, w in enumerate(windows) if all(allowed[i : i + per_window])]
+        fits = bool(inside)
+        windows = inside or windows
+        availability_facts = _availability_facts(series, tz, availability)
     windows_from = None
     if now is not None:
         windows, windows_from = _still_usable(series, windows, now)
@@ -104,4 +160,6 @@ def analyse(series: PriceSeries, window_hours: int = 3, now: datetime | None = N
         priciest_window=priciest,
         window_spread_eur_per_mwh=round(priciest.avg_eur_per_mwh - cheapest.avg_eur_per_mwh, 2),
         windows_from_utc=windows_from,
+        availability=availability_facts,
+        fits_availability=fits,
     )

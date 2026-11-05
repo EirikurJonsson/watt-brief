@@ -9,7 +9,7 @@ from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from watt_brief.analysis import PriceFacts, analyse
+from watt_brief.analysis import Availability, PriceFacts, analyse
 from watt_brief.config import Settings
 from watt_brief.entsoe import ZONES, EntsoeClient, EntsoeError, PriceSeries, parse_day_ahead_xml
 from watt_brief.history import PriceHistory
@@ -40,8 +40,10 @@ SeriesSource = Callable[[str], PriceSeries]
 def facts_from(
     series_source: SeriesSource, clock: Callable[[], datetime] = lambda: datetime.now(UTC)
 ) -> FactsSource:
-    def get(zone: str, window_hours: int) -> PriceFacts:
-        return analyse(series_source(zone), window_hours=window_hours, now=clock())
+    def get(zone: str, window_hours: int, availability: Availability | None = None) -> PriceFacts:
+        return analyse(
+            series_source(zone), window_hours=window_hours, now=clock(), availability=availability
+        )
 
     return get
 

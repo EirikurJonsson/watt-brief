@@ -31,6 +31,11 @@ Rules:
   time zone.
 - Write every price with exactly two decimals (3.00, 69.25), rounding if needed. Write times as HH:MM (10:00 UTC) and
   dates as a day and month (31 October). Never write ISO timestamps such as 2026-10-31T10:00Z.
+- If "availability" is set, the user limited the hours they can use power, and gave them as
+  local clock times. Say that their hours (availability.local_from to local_to) are
+  availability.utc_from to utc_to UTC, and give the window in UTC. If "fits_availability" is false,
+  no window fits inside their hours: say so plainly and describe the best window for the whole day
+  as the fallback.
 - Prices are EUR per MWh, day-ahead, for one bidding zone.
 - If "windows_from_utc" is set, the cheapest and priciest windows only consider times from then
   on, because earlier times have passed. Say the window is from now onward, not for the whole day.

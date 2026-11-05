@@ -32,8 +32,9 @@ DENMARK_AMBIGUOUS = (
     "Choose one in the country selector, or name a Danish city in your question."
 )
 
-# (zone, window_hours) -> facts. Raises NoDataError when the zone has no data.
-FactsSource = Callable[[str, int], PriceFacts]
+# (zone, window_hours[, availability]) -> facts. Raises NoDataError when the zone has no data.
+# The availability argument is passed only when the question limited the hours of use.
+FactsSource = Callable[..., PriceFacts]
 
 
 class NoDataError(BriefError):
@@ -120,7 +121,11 @@ def run_pipeline(
                 f"I only cover {', '.join(ZONES)} day-ahead prices for now.", "zone_unsupported"
             )
         zone = settings.effective_default_zone if plan.zone == UNSPECIFIED else plan.zone
-    facts = get_facts(zone, plan.window_hours)
+    availability = plan.availability
+    if availability is None:
+        facts = get_facts(zone, plan.window_hours)
+    else:
+        facts = get_facts(zone, plan.window_hours, availability)
 
     brief, completion = write_brief(
         client,

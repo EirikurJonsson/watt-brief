@@ -34,6 +34,18 @@ ZONES = {
     "DK2": "10YDK-2--------M",
 }
 
+# Where each zone's people live, for reading the hours they type ("08:00 to 16:00") as local time.
+ZONE_TIMEZONES = {
+    "DE_LU": "Europe/Berlin",
+    "FR": "Europe/Paris",
+    "NL": "Europe/Amsterdam",
+    "BE": "Europe/Brussels",
+    "AT": "Europe/Vienna",
+    "ES": "Europe/Madrid",
+    "DK1": "Europe/Copenhagen",
+    "DK2": "Europe/Copenhagen",
+}
+
 _RESOLUTION = re.compile(r"^PT(\d+)M$")
 
 

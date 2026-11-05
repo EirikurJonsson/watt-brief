@@ -333,6 +333,7 @@ def create_app(
                 previous_day(series),
                 display,
                 datetime.now(UTC),
+                result.plan.availability,
             )
         except (NoDataError, ValueError):
             pass  # the brief is still useful without the chart

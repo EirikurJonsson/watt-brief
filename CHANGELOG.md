@@ -20,5 +20,8 @@ Notable changes, newest first. Versions are git tags; the running commit is show
   today, only windows from the current slot onward are considered (`windows_from_utc` in the facts).
 - Prices shown to two decimals everywhere; all times are UTC only (no browser-local or CET times
   on the page, in the table or in briefs).
+- Questions that limit the hours of use ("I can charge between 08:00 and 16:00"): the hours are
+  read as local time for the zone's country, the cheapest window is found inside them, and the
+  brief states the hours in UTC. Fixes such questions being refused as "unsafe".
 - CI: dependency audit, image build attestations (provenance and SBOM), deploy that checks the
   running commit, rolls back on failure and can smoke test the live site.
