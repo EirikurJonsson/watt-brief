@@ -18,6 +18,11 @@ RUN useradd --uid 1000 --no-create-home --shell /usr/sbin/nologin app \
 # The app runs from /opt/venv and installs nothing at runtime, so the base image's package
 # installer is dead weight with its own vulnerable bundled libraries. Remove it.
 RUN python -m pip uninstall -y pip setuptools wheel
+# The base image can lag Debian's security fixes. Upgrade only apt (CI's Trivy scan failed on
+# CVE-2026-109518, fixed in apt 3.0.4), then drop the package lists again.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg7.0 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /app /app
 ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 SERVE_HOST=0.0.0.0
