@@ -61,5 +61,8 @@ or after free compute. Assume they read this file.
   English and German.
 - Questions are sent to the model provider, who handles them under its own terms. The privacy page
   says so.
+- The ENTSO-E response is untrusted input too. It is parsed with a hardened XML parser, size
+  checked, and fuzzed with Hypothesis (`tests/test_fuzz.py`). The stored history holds numbers only.
+- Rate limits and bans are in memory and reset on restart; there is one instance.
 - Some protections live outside this repository and are not verified here: the provider spend
   limit, Cloudflare rules, branch protection, and the state of the running server.

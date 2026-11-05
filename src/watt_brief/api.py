@@ -9,6 +9,7 @@ import hmac
 import ipaddress
 import json
 import logging
+import os
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -46,6 +47,9 @@ from watt_brief.sources import (
 from watt_brief.units import CURRENCIES, UNITS, make_display
 
 logger = logging.getLogger(__name__)
+
+# The commit this image was built from (set by CI), so "what is running" is one request.
+VERSION = os.environ.get("GIT_SHA", "dev")[:12]
 
 MAX_BODY_BYTES = 4096
 STATIC_DIR = Path(__file__).parent / "static"
@@ -135,7 +139,12 @@ def create_app(
     slots = threading.BoundedSemaphore(settings.max_concurrent_requests)
     if history is None and get_series is None:
         history = build_history(settings)
-    series_source = get_series or build_series_source(settings, history)
+
+    def on_data_event(kind: str, result: str) -> None:
+        counter = metrics.entsoe_fetches if kind == "fetch" else metrics.price_cache
+        counter.labels(result).inc()
+
+    series_source = get_series or build_series_source(settings, history, on_data_event)
     facts_source = get_facts or facts_from(series_source)
     price_limiter = RateLimiter(60, 2000)
     data_source = "synthetic" if settings.facts_source == "fixture" else "entsoe"
@@ -176,6 +185,7 @@ def create_app(
             try:
                 await run_in_threadpool(warm)  # type: ignore[arg-type]
             except Exception:  # never let the warm-up loop die
+                metrics.warm_failures.inc()
                 logger.exception("warm_failed")
             await asyncio.sleep(WARM_INTERVAL_SECONDS)
 
@@ -376,6 +386,7 @@ def create_app(
             "data_source": "synthetic" if settings.facts_source == "fixture" else "entsoe",
             "stale_zones": stale,
             "prices_through": through_report() if through_report else None,
+            "version": VERSION,
         }
 
     @app.get("/metrics")
@@ -388,6 +399,8 @@ def create_app(
             return Response(status_code=404)
         metrics.spend_today.set(spend.today())
         metrics.kill_switch.set(1 if kill.active() else 0)
+        metrics.stale_zones.set(len(stale_zones()))
+        metrics.history_rows.set(history.count() if history else 0)
         return PlainTextResponse(
             metrics.render().decode(), media_type="text/plain; version=0.0.4; charset=utf-8"
         )

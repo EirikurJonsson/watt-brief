@@ -22,6 +22,8 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run pyright src
+      # Known-vulnerable pinned dependencies fail the build, not only the image scan.
+      - run: uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && uv run pip-audit -r /tmp/requirements.txt --no-deps --disable-pip
       - run: uv run pytest -q --cov=src/watt_brief --cov-report=term-missing:skip-covered --cov-fail-under=85
 
   secrets:
@@ -52,6 +54,7 @@ jobs:
           load: true
           push: false
           tags: watt-brief:ci
+          build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Scan the image for fixable high and critical vulnerabilities
@@ -76,8 +79,13 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: GIT_SHA=${{ github.sha }}
+          # Build attestations: a signed statement of how the image was built, and its contents.
+          provenance: mode=max
+          sbom: true
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
 
   # Off until the repository variable DEPLOY_ENABLED is set to "true" (see docs/deploy.md).
@@ -89,6 +97,7 @@ jobs:
       group: deploy-watt-brief
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Connect to Tailscale
         uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
         with:
@@ -103,11 +112,23 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_DEPLOY_KEY }}
-          envs: GHCR_USERNAME,GHCR_TOKEN,DEPLOY_DIR
+          envs: GHCR_USERNAME,GHCR_TOKEN,DEPLOY_DIR,IMAGE,GIT_SHA
           script: |
             set -e
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             cd "${DEPLOY_DIR}"
+            # Remember what is running now, so a bad release can be put back.
+            previous=$(docker inspect --format '{{.Image}}' watt_brief 2>/dev/null || echo "")
+            rollback() {
+              echo "$1"
+              docker logs --tail 30 watt_brief || true
+              if [ -n "$previous" ]; then
+                echo "rolling back to $previous"
+                docker tag "$previous" "${IMAGE}:latest"
+                docker compose up -d --no-deps --pull never watt_brief
+              fi
+              exit 1
+            }
             docker compose pull watt_brief
             docker compose up -d watt_brief
             # Fail the deploy if the new container does not become healthy.
@@ -116,13 +137,20 @@ jobs:
               [ "$status" = "healthy" ] && break
               sleep 2
             done
-            if [ "$status" != "healthy" ]; then
-              echo "watt_brief is $status after deploy; last logs:"
-              docker logs --tail 30 watt_brief
-              exit 1
-            fi
+            [ "$status" = "healthy" ] || rollback "watt_brief is $status after deploy"
+            # Healthy is not enough: it must be this commit, not an old image that was cached.
+            running=$(docker exec watt_brief python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/healthz'))['version'])")
+            [ "$running" = "$(echo "$GIT_SHA" | cut -c1-12)" ] || rollback "running version is $running, expected $GIT_SHA"
             docker image prune -f
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          GIT_SHA: ${{ github.sha }}
+
+      # The public URL, through Cloudflare: the same path a user takes. Set the repository
+      # variable SMOKE_URL to switch it on. One real brief, a fraction of a cent.
+      - name: Smoke test the live site
+        if: vars.SMOKE_URL != ''
+        run: scripts/smoke.sh "${{ vars.SMOKE_URL }}"

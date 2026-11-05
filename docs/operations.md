@@ -41,6 +41,58 @@ Useful series: `wb_requests_total{outcome}`, `wb_guard_rejections_total{stage,re
 `wb_request_seconds`, `wb_llm_tokens_total`, `wb_llm_cost_usd_total`, `wb_spend_today_usd`,
 `wb_spend_cap_usd`, `wb_banned_clients`, `wb_kill_switch`.
 
+Data path: `wb_entsoe_fetches_total{result}` (ok or error), `wb_price_cache_total{source}` (memory
+or history), `wb_stale_zones` (zones still on today's prices after the tomorrow deadline),
+`wb_history_rows`, `wb_warm_failures_total`. After warm-up, cache hits should vastly outnumber
+fetches, and fetches should be about one per zone per day.
+
+## Service levels
+
+Targets to alert on. They are starting values from the load test, not promises to users.
+
+| What | Target | Signal |
+|---|---|---|
+| Brief requests answered | at least 99% over 7 days, rate limits and guard rejections excluded | `wb_requests_total` |
+| Brief latency | 95% under 13 s | `wb_request_seconds` |
+| Prices fresh | tomorrow's prices held by 15:00 Brussels time, every day | `wb_stale_zones` is 0 |
+| ENTSO-E reachable | fewer than 5% of fetches fail over a day | `wb_entsoe_fetches_total{result="error"}` |
+| Spend | never above the daily cap | `wb_spend_today_usd` against `wb_spend_cap_usd` |
+
+## Backups and restore
+
+The history and spend databases are the only state. Back them up with SQLite's online backup,
+which is safe while the service runs:
+
+```
+docker exec watt_brief python -m watt_brief.backup            # writes data/backups/, keeps 14
+```
+
+Run it from cron on the host (daily), then copy `watt-brief-data/backups/` to another disk or
+machine. Same-disk copies do not survive a disk failure.
+
+Restore drill (do it once, for real, so the steps are known to work):
+
+1. `docker compose stop watt_brief`
+2. copy the wanted `history-<time>.sqlite` over `watt-brief-data/history.sqlite`, same for spend,
+   and delete any `*.sqlite-wal` and `*.sqlite-shm` beside them
+3. `chown 1000:1000` the files, then `docker compose up -d watt_brief`
+4. check `/healthz` and `wb_history_rows`
+
+If `spend.sqlite` is lost, today's counted spend restarts at zero, so check the provider's own
+dashboard before leaving the service unattended.
+
+## Rollback
+
+The deploy job rolls back by itself when the new container is unhealthy or runs the wrong commit.
+By hand: set the compose `image:` to `ghcr.io/eirikurjonsson/watt-brief:<good-sha>` and run
+`docker compose up -d watt_brief`. Every commit on `main` has an image with its SHA as the tag.
+
+## Limits of a single instance
+
+Rate limits, bans and the abuse tracker live in memory: a restart or deploy resets them. That is
+acceptable for one container. Running two would give each its own counters and its own warm-up
+loop, so it needs those moved to shared storage first.
+
 ## Alerts
 
 Evaluated after every request. Each fires at most once per 30 minutes.

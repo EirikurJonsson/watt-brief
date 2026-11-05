@@ -89,10 +89,12 @@ class EntsoeSeriesSource:
         client: EntsoeClient | None = None,
         history: PriceHistory | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        on_event: Callable[[str, str], None] | None = None,
     ):
         self._entsoe = client or EntsoeClient(settings)
         self._history = history
         self._clock = clock
+        self._on_event = on_event or (lambda kind, result: None)
         self._days: dict[tuple[str, datetime], PriceSeries] = {}
         self._attempted: dict[tuple[str, datetime], datetime] = {}
         self._tomorrow_missing: set[str] = set()
@@ -110,6 +112,7 @@ class EntsoeSeriesSource:
         with self._lock:
             hit = self._days.get(key)
         if hit:
+            self._on_event("cache", "memory")
             return hit
         with self._zone_locks[zone]:
             with self._lock:
@@ -120,6 +123,7 @@ class EntsoeSeriesSource:
             if stored and self._complete(stored, day):
                 with self._lock:
                     self._days[key] = stored
+                self._on_event("cache", "history")
                 return stored
             now = self._clock()
             last = self._attempted.get(key)
@@ -129,8 +133,10 @@ class EntsoeSeriesSource:
             try:
                 series = self._entsoe.day_ahead_prices(zone, *day)
             except EntsoeError as exc:
+                self._on_event("fetch", "error")
                 log(logger, "entsoe_not_available", zone=zone, day=day[0].isoformat(), why=str(exc))
                 return None
+            self._on_event("fetch", "ok")
             series = replace(series, fetched_at=now)
             with self._lock:
                 self._days[key] = series
@@ -208,8 +214,9 @@ def entsoe_series_source(
     client: EntsoeClient | None = None,
     history: PriceHistory | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    on_event: Callable[[str, str], None] | None = None,
 ) -> EntsoeSeriesSource:
-    return EntsoeSeriesSource(settings, client, history, clock)
+    return EntsoeSeriesSource(settings, client, history, clock, on_event)
 
 
 def entsoe_facts_source(settings: Settings, client: EntsoeClient | None = None) -> FactsSource:
@@ -223,9 +230,13 @@ def build_history(settings: Settings) -> PriceHistory | None:
     return PriceHistory(settings.history_db_path)
 
 
-def build_series_source(settings: Settings, history: PriceHistory | None = None) -> SeriesSource:
+def build_series_source(
+    settings: Settings,
+    history: PriceHistory | None = None,
+    on_event: Callable[[str, str], None] | None = None,
+) -> SeriesSource:
     if settings.facts_source == "entsoe":
-        return entsoe_series_source(settings, history=history)
+        return entsoe_series_source(settings, history=history, on_event=on_event)
     return fixture_series_source()
 
 

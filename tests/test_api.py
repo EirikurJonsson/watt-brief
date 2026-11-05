@@ -618,3 +618,15 @@ def test_errors_carry_a_stable_code_for_the_page_to_translate(tmp_path):
     assert bad_json.json()["code"] == "bad_request"
     assert denmark.json()["code"] == "denmark_ambiguous"
     assert "DK1" in denmark.json()["error"]  # the English text stays for API users
+
+
+def test_healthz_reports_the_running_version(tmp_path):
+    with make_client(tmp_path) as client:
+        assert isinstance(client.get("/healthz").json()["version"], str)
+
+
+def test_metrics_include_the_data_path_gauges(tmp_path):
+    with make_client(tmp_path, metrics_token="s3cret") as client:
+        text = client.get("/metrics", headers={"authorization": "Bearer s3cret"}).text
+    for name in ("wb_stale_zones", "wb_history_rows", "wb_warm_failures_total"):
+        assert name in text

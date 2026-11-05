@@ -31,6 +31,7 @@ Variables:
 | Variable | Value |
 |---|---|
 | `DEPLOY_DIR` | `<COMPOSE_DIR>` |
+| `SMOKE_URL` | Optional, e.g. `https://<HOSTNAME>`. After each deploy, `scripts/smoke.sh` runs against it through Cloudflare, including one real brief. |
 | `DEPLOY_ENABLED` | `true`. Set this **last**, after step 2 and 3. Until then CI builds and pushes the image but does not deploy. |
 
 The deploy key can run commands on your server, and anyone who can push to `main` can use it.
@@ -119,7 +120,7 @@ curl -H "Authorization: Bearer <METRICS_TOKEN>" https://<HOSTNAME>/metrics
 |---|---|
 | Deploy a change | merge to `main` |
 | Stop all model calls now | `touch <COMPOSE_DIR>/watt-brief-data/KILL_SWITCH` (delete the file to resume) |
-| Roll back | in the compose file set `image: ghcr.io/eirikurjonsson/watt-brief:<good-sha>`, then `docker compose up -d watt_brief` |
+| Roll back | automatic if the new container is unhealthy or runs the wrong commit; by hand: in the compose file set `image: ghcr.io/eirikurjonsson/watt-brief:<good-sha>`, then `docker compose up -d watt_brief` |
 | Rotate the model key | edit `watt-brief.env`, then `docker compose up -d --force-recreate watt_brief` |
 | See today's spend | `curl https://<HOSTNAME>/healthz` shows the percent of the cap used |
 | Logs | `docker logs -f watt_brief` (structured JSON; alerts are `WARNING` and `ERROR` lines) |

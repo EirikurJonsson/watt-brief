@@ -320,3 +320,29 @@ def test_a_history_write_failure_never_fails_the_request():
     market.publish(windows(MORNING)[1][0])
     source, _ = build(market, history=Broken())
     assert len(source("DK1").points) == 24
+
+
+def test_cache_and_fetch_events_are_reported_for_metrics():
+    events: list[tuple[str, str]] = []
+    market = Market()
+    market.publish(windows(MORNING)[1][0])
+    client = EntsoeClient(settings(), transport=httpx.MockTransport(market))
+    source = entsoe_series_source(
+        settings(), client, None, Clock(MORNING), lambda *e: events.append(e)
+    )
+    source("DK1")
+    source("DK1")
+    assert events == [("fetch", "ok"), ("cache", "memory")]
+
+
+def test_a_failed_fetch_is_reported_as_an_error_event():
+    events: list[tuple[str, str]] = []
+    market = Market()
+    market.down = True
+    client = EntsoeClient(settings(), transport=httpx.MockTransport(market))
+    source = entsoe_series_source(
+        settings(), client, None, Clock(MORNING), lambda *e: events.append(e)
+    )
+    with pytest.raises(NoDataError):
+        source("DK1")
+    assert events == [("fetch", "error")]

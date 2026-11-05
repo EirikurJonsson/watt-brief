@@ -118,3 +118,38 @@ def test_backfill_saves_each_day_and_counts_the_missing_ones():
     )
     assert (saved, missing) == (2, 2)
     assert len(calls) == 4 and calls == sorted(calls)  # oldest day first
+
+
+def test_a_new_database_is_stamped_with_the_current_schema_version():
+    from watt_brief.history import MIGRATIONS
+
+    h = PriceHistory(":memory:")
+    assert h._db.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS)
+
+
+def test_an_unversioned_database_from_before_migrations_is_adopted_with_its_rows():
+    import sqlite3
+
+    from watt_brief.history import MIGRATIONS, migrate
+
+    db = sqlite3.connect(":memory:")
+    db.execute(MIGRATIONS[0])  # how the table was created before versioning: user_version = 0
+    db.execute(
+        "INSERT INTO prices VALUES ('DK1', '2026-11-05T00:00Z', 50.0, 60, '2026-11-05T09:00Z')"
+    )
+    assert migrate(db) == len(MIGRATIONS)
+    assert db.execute("SELECT COUNT(*) FROM prices").fetchone()[0] == 1
+    assert migrate(db) == len(MIGRATIONS)  # running again changes nothing
+
+
+def test_a_database_from_a_newer_build_is_refused_not_damaged():
+    import sqlite3
+
+    import pytest
+
+    from watt_brief.history import MIGRATIONS, migrate
+
+    db = sqlite3.connect(":memory:")
+    db.execute(f"PRAGMA user_version = {len(MIGRATIONS) + 1}")
+    with pytest.raises(RuntimeError, match="newer than this build"):
+        migrate(db)

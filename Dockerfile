@@ -25,7 +25,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /opt/venv /opt/venv
 COPY --from=build /app /app
-ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 SERVE_HOST=0.0.0.0
+ARG GIT_SHA=dev
+ENV PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 SERVE_HOST=0.0.0.0 \
+    GIT_SHA=$GIT_SHA
 WORKDIR /app
 USER app
 EXPOSE 8000

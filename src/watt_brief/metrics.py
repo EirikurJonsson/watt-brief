@@ -37,6 +37,29 @@ class Metrics:
         self.spend_today = Gauge("wb_spend_today_usd", "Spend today (UTC)", registry=self.registry)
         self.spend_cap = Gauge("wb_spend_cap_usd", "Daily spend cap", registry=self.registry)
         self.kill_switch = Gauge("wb_kill_switch", "1 when active", registry=self.registry)
+        self.entsoe_fetches = Counter(
+            "wb_entsoe_fetches_total",
+            "ENTSO-E requests by result",
+            ["result"],
+            registry=self.registry,
+        )
+        self.price_cache = Counter(
+            "wb_price_cache_total",
+            "Price lookups served from cache",
+            ["source"],
+            registry=self.registry,
+        )
+        self.warm_failures = Counter(
+            "wb_warm_failures_total", "Warm-up rounds that raised", registry=self.registry
+        )
+        self.stale_zones = Gauge(
+            "wb_stale_zones",
+            "Zones serving today's prices past the tomorrow deadline",
+            registry=self.registry,
+        )
+        self.history_rows = Gauge(
+            "wb_history_rows", "Price slots stored in the history table", registry=self.registry
+        )
         self.bans = Gauge("wb_banned_clients", "Clients currently banned", registry=self.registry)
 
     def render(self) -> bytes:
