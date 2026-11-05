@@ -58,6 +58,16 @@ Targets to alert on. They are starting values from the load test, not promises t
 | ENTSO-E reachable | fewer than 5% of fetches fail over a day | `wb_entsoe_fetches_total{result="error"}` |
 | Spend | never above the daily cap | `wb_spend_today_usd` against `wb_spend_cap_usd` |
 
+## Nightly evals
+
+`.github/workflows/nightly-evals.yml` runs the live quality, attack, language and planner evals at
+03:17 UTC with the production settings (planner and critic on). It fails when a suite drops under
+its threshold: every attack case must be stopped, quality and language cases need 90%. Thresholds
+are `MIN_PASS` in `src/watt_brief/evals/runner.py`. A run costs about 2 cents and has a hard cost
+stop. It needs the repository secrets `LLM_API_KEY`, `LLM_BASE_URL`, `MODEL_PLANNER`,
+`MODEL_ANALYST` and `MODEL_CRITIC`; without `LLM_API_KEY` it skips itself. Results are attached
+to each run. The page is also checked in a real browser on every push (`browser` job in `ci.yml`).
+
 ## Backups and restore
 
 The history and spend databases are the only state. Back them up with SQLite's online backup,

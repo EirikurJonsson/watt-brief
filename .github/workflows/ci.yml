@@ -26,6 +26,35 @@ jobs:
       - run: uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && uv run pip-audit -r /tmp/requirements.txt --no-deps --disable-pip
       - run: uv run pytest -q --cov=src/watt_brief --cov-report=term-missing:skip-covered --cov-fail-under=85
 
+  # The page in a real browser: layout on a phone, keyboard use, hostile responses. The brief API
+  # is mocked inside the browser and prices are the synthetic fixture, so it costs nothing.
+  browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: uv sync --no-dev
+      - name: Start the server
+        run: |
+          FACTS_SOURCE=fixture HISTORY_DB_PATH=/tmp/h.sqlite SPEND_DB_PATH=/tmp/s.sqlite \
+          LLM_BASE_URL=https://x.invalid/v1 LLM_API_KEY=x MODEL_PLANNER=m MODEL_ANALYST=m MODEL_CRITIC=m \
+          nohup uv run python -m watt_brief.serve > /tmp/serve.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/healthz && break; sleep 1; done
+      - name: Check the page in Chrome
+        run: CHROME_BIN=google-chrome node scripts/ui_check.mjs http://127.0.0.1:8000/ ui-shots
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ui-screenshots
+          path: ui-shots
+      - if: failure()
+        run: tail -30 /tmp/serve.log
+
   secrets:
     runs-on: ubuntu-latest
     permissions:
@@ -39,7 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   image:
-    needs: [test, secrets]
+    needs: [test, secrets, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: read

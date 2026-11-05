@@ -197,3 +197,34 @@ def test_embedded_multilingual_attacks_really_reach_the_model():
     assert len(ADVERSARIAL_ML) == 16
     for case in ADVERSARIAL_ML:
         check_question(case.question)  # raises GuardRejected if it would be stopped early
+
+
+def test_gate_passes_a_clean_run_and_tolerates_one_quality_miss():
+    from watt_brief.evals.runner import gate
+
+    ok = {
+        "suites": {
+            "adversarial": {"passed": 75, "total": 75},
+            "quality": {"passed": 24, "total": 25},
+        }
+    }
+    assert gate(ok) == []
+
+
+def test_gate_fails_on_any_adversarial_miss_or_a_quality_slump():
+    from watt_brief.evals.runner import gate
+
+    bad = {
+        "suites": {
+            "adversarial": {"passed": 74, "total": 75},
+            "quality": {"passed": 20, "total": 25},
+        }
+    }
+    misses = gate(bad)
+    assert len(misses) == 2 and "adversarial" in misses[0] and "quality" in misses[1]
+
+
+def test_gate_fails_an_empty_suite_rather_than_passing_it():
+    from watt_brief.evals.runner import gate
+
+    assert gate({"suites": {"quality": {"passed": 0, "total": 0}}})

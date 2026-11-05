@@ -15,8 +15,11 @@ const PORT = 9333;
 mkdirSync(OUT, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const chrome = spawn("chromium", [
+// CHROME_BIN picks the browser (CI uses google-chrome); CI=true adds --no-sandbox, which the
+// hosted runners need because they run it inside a container-like user namespace.
+const chrome = spawn(process.env.CHROME_BIN || "chromium", [
   "--headless=new", `--remote-debugging-port=${PORT}`,
+  ...(process.env.CI ? ["--no-sandbox"] : []),
   `--user-data-dir=${mkdtempSync(join(tmpdir(), "wb-chrome-"))}`,
   "--no-first-run", "--disable-gpu", "about:blank",
 ], { stdio: "ignore" });

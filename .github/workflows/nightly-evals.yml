@@ -1,0 +1,46 @@
+name: nightly-evals
+
+# The live quality and attack evals against the real model, every night and on demand, so a model
+# or prompt change cannot quietly make briefs worse or attacks easier. Costs a few cents a run.
+# Needs the repository secrets LLM_API_KEY, LLM_BASE_URL, MODEL_PLANNER, MODEL_ANALYST and
+# MODEL_CRITIC; without LLM_API_KEY the job skips itself. A failed gate fails the run, which
+# GitHub reports by email to the repository owner.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+      MODEL_PLANNER: ${{ secrets.MODEL_PLANNER }}
+      MODEL_ANALYST: ${{ secrets.MODEL_ANALYST }}
+      MODEL_CRITIC: ${{ secrets.MODEL_CRITIC }}
+    steps:
+      - name: Skip without a key
+        if: env.LLM_API_KEY == ''
+        run: echo "LLM_API_KEY is not set; nothing to run."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.LLM_API_KEY != ''
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        if: env.LLM_API_KEY != ''
+      - run: uv sync --no-dev
+        if: env.LLM_API_KEY != ''
+      # The same guards, planner and critic as production. --max-cost is a hard stop.
+      - name: Quality, attacks and languages
+        if: env.LLM_API_KEY != ''
+        run: uv run python -m watt_brief.evals.runner --repeats 3 --max-cost 0.50 --planner --critic --gate
+      - name: Planner accuracy
+        if: env.LLM_API_KEY != ''
+        run: uv run python -m watt_brief.evals.runner --planner-eval --repeats 3 --max-cost 0.25 --gate
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && env.LLM_API_KEY != ''
+        with:
+          name: eval-results
+          path: evals/results
