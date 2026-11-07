@@ -10,9 +10,8 @@ recommended decision, with the reasoning and the cost of producing it.
 
 **Live demo: https://watt-brief.cpa-intel.tech**
 
-**Status: working end to end on synthetic price data.** Real ENTSO-E data is waiting on an
-API token. Progress and open items: [docs/status.md](docs/status.md). Every response says
-which data it used.
+**Status: live, working end to end on real ENTSO-E day-ahead prices.** Progress and open
+items: [docs/status.md](docs/status.md). Every response says which data it used.
 
 ![The page opens on the day's prices, with the cheapest and priciest windows marked](docs/images/hero-light.png)
 
@@ -20,7 +19,7 @@ which data it used.
 |---|---|
 | ![The same page on a phone](docs/images/hero-phone.png) | ![A brief written by the model](docs/images/result-dark.png) |
 
-*Synthetic demo data. The brief is real model output. How the page was designed and why:
+*Screenshots were taken on synthetic demo data. The brief is real model output. How the page was designed and why:
 [docs/design.md](docs/design.md).*
 
 ## Why this exists
