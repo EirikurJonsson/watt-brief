@@ -250,6 +250,8 @@ def test_index_page_and_assets_are_served_with_a_strict_csp(tmp_path):
     assert script.status_code == 200 and style.status_code == 200
     csp = page.headers["content-security-policy"]
     assert "default-src 'self'" in csp
+    assert "script-src 'self' https://umami.cpa-intel.tech;" in csp
+    assert "connect-src 'self' https://umami.cpa-intel.tech;" in csp
     assert "unsafe-inline" not in csp and "unsafe-eval" not in csp
 
 

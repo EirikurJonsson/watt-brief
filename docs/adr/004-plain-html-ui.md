@@ -30,7 +30,8 @@ is written to the page with `textContent`, never as HTML.
 ## Consequences
 
 - The Content Security Policy is `default-src 'self'` with no `unsafe-inline` and no
-  `unsafe-eval`. Tests fail if the page gains inline script, inline style, or any of
+  `unsafe-eval`. The one exception (8 Nov): `script-src` and `connect-src` also allow our own
+  Umami instance, https://umami.cpa-intel.tech, for cookieless visit counts. Tests fail if the page gains inline script, inline style, or any of
   `innerHTML`, `eval` and similar.
 - The API requires `Content-Type: application/json`. That forces a CORS preflight that other
   websites cannot pass, so a visitor's browser cannot be tricked into spending our budget.

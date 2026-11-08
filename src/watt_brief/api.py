@@ -59,8 +59,11 @@ SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "X-Frame-Options": "DENY",
+    # Only our own Umami instance may load a script and receive the visit ping.
     "Content-Security-Policy": (
-        "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+        "default-src 'self'; script-src 'self' https://umami.cpa-intel.tech; "
+        "connect-src 'self' https://umami.cpa-intel.tech; "
+        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     ),
 }
 
