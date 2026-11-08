@@ -38,10 +38,10 @@ or after free compute. Assume they read this file.
 | Cost exhaustion | 500-character input cap, max output tokens, per-visitor rate limit (6 a minute, 100 a day), temporary bans, concurrency limit, persisted daily spend cap ($1), kill switch file | Load test: overload returns 503 at once, memory flat (`docs/load-test.md`) | Done in the app. **Not confirmed:** a spend limit set at the model provider |
 | Key theft | Keys only in the server env file. Redacted in logs. Never in the client, the repository or the image. gitleaks in CI | Secret scan before every push | Done |
 | Access to the home network | Cloudflare Tunnel, no open ports. Container runs as non-root, read-only, capabilities dropped, no new privileges, on its own network | `deploy/docker-compose.watt-brief.yml` | Done in the repository. The running server is only as safe as its last update |
-| Denial of service | Rate limit and concurrency limit in the app. Model calls run inside a time budget (40 s each, retries included) | Load test | App side done. **Not confirmed:** a Cloudflare rate-limit rule in front |
+| Denial of service | Rate limit and concurrency limit in the app. Model calls run inside a time budget (40 s each, retries included) | Load test | App side done. Decision (8 Nov): no Cloudflare rate-limit rule for now. The app limits, bans and spend cap are judged enough while the provider spend limit backs them up. Needs `TRUST_CF_CONNECTING_IP=true` on the server |
 | Metrics or alert data exposed | `/metrics` returns 404 unless a token is set and sent. Alerts hold counts and percentages, never question text | Blank-token bug found and fixed | Done. The alert topic on ntfy.sh is the only secret protecting it, so it is treated like a key |
 | Sensitive data in logs | Structured logs. Questions are never logged, only their length | Privacy page says the same; log redaction tests | Done |
-| Vulnerable or hijacked dependencies | Actions pinned by commit, Trivy scan before an image is published, Dependabot, runtime image without pip | Trivy found HIGH issues in the base image once; fixed | Done. Branch protection **not confirmed** |
+| Vulnerable or hijacked dependencies | Actions pinned by commit, Trivy scan before an image is published, Dependabot, runtime image without pip | Trivy has found HIGH issues in the base image twice (apt, then zlib1g); both fixed and the scan blocked the image until they were | Done. Branch protection on `main` (8 Nov): `test`, `browser`, `secrets` and `image` must pass, no force pushes, no deletion; admin not enforced, no required reviews (solo maintainer) |
 | The service is down and nobody knows | Alerts go to a phone through ntfy. They cannot fire if the service is down | Test alerts received | Partial: an outside uptime check is still open |
 
 ## Decisions that were open
@@ -65,4 +65,4 @@ or after free compute. Assume they read this file.
   checked, and fuzzed with Hypothesis (`tests/test_fuzz.py`). The stored history holds numbers only.
 - Rate limits and bans are in memory and reset on restart; there is one instance.
 - Some protections live outside this repository and are not verified here: the provider spend
-  limit, Cloudflare rules, branch protection, and the state of the running server.
+  limit and the state of the running server. Branch protection is on (see above). No Cloudflare rules are used.

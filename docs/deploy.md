@@ -15,6 +15,11 @@ Placeholders: `<HOSTNAME>` is the public name you pick (for example `watt-brief.
 `<COMPOSE_DIR>` is the directory that holds the n8n compose file (the cpa-intel workflow uses
 `/home/eirikur/n8n`).
 
+> **Current state (8 Nov):** automatic deploy is not enabled. CI builds, scans and publishes the
+> image to GHCR on every push to `main`; the server is updated by hand (see Rollback in
+> operations.md for the pull and `docker compose up -d` commands). Follow this page only when you
+> turn automatic deploy on.
+
 ## 1. GitHub, once (repo Settings, Secrets and variables, Actions)
 
 Secrets. The first five are the same values cpa-intel already uses:

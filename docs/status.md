@@ -6,7 +6,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 ## Plan
 
 1. [x] Repo skeleton, config, ADR 001
-2. [x] Threat model written, and reviewed against the built system on 1 Nov. Still open there: things outside the repository (provider spend limit, Cloudflare rule, branch protection)
+2. [x] Threat model written, and reviewed against the built system on 1 Nov. Branch protection on `main` since 8 Nov; Cloudflare rate-limit rule deliberately skipped. Still open there: the provider spend limit (set it in the provider dashboard)
 3. [x] Structured logging and request IDs from the first line of app code
 4. [x] ENTSO-E client built and tested; live on 2 Nov. Real recordings added as fixtures (`live_*`). Live check found two parser bugs (several TimeSeries per response; intraday series in ES), both fixed. Open: confirm what ENTSO-E's "sequence 2" is; we use sequence 1, which matches ES's coupled price
 5. [x] One agent answers one question end to end (on synthetic fixture data)
@@ -18,7 +18,7 @@ Threats and mitigations: [threat-model.md](threat-model.md).
 10. [x] Alerts: spend, error spike, abuse pattern, bans, kill switch. Logs only for now (decision: no webhook yet; ALERT_WEBHOOK_URL is ready when wanted)
 11. [x] Abuse controls: rate limit, temporary bans, persisted daily spend cap, kill switch, concurrency and body limits
 12. [x] UI: plain HTML page with strict CSP, redesigned around the price chart (ADR 004, docs/design.md), checked in a real browser (scripts/ui_check.mjs)
-13. [x] Deployed on the home server behind Cloudflare Tunnel (7 Nov): live at https://watt-brief.cpa-intel.tech on real ENTSO-E data (`data_source: entsoe` in `/healthz`), running the CI-built image. `scripts/smoke.sh` passes against the live site. Tagged `v0.1.0-dev`. Open: external uptime check (deferred)
+13. [x] Deployed on the home server behind Cloudflare Tunnel (7 Nov): live at https://watt-brief.cpa-intel.tech on real ENTSO-E data (`data_source: entsoe` in `/healthz`), running the CI-built image. `scripts/smoke.sh` passes against the live site. Tagged `v0.1.0-dev`. Open: external uptime check (deferred). Decision (8 Nov): no automatic deploy for now. CI builds, scans and pushes the image; the server is updated by hand. `DEPLOY_ENABLED` stays unset and the deploy secrets are not configured
 14. [ ] Write up cost, latency, attacks seen, and what broke Outline with sources for every claim: [writeup-outline.md](writeup-outline.md). Real-data sections are pending.
 15. [x] Alerts to ntfy (1 Nov). Live: alerts reach Eirikur's phone (confirmed 7 Nov). Open: external uptime check (deferred)
     - `alerts.py` posts JSON `{"text": ...}` to `ALERT_WEBHOOK_URL`. ntfy wants a plain-text body with
